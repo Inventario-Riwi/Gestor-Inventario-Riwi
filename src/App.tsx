@@ -75,6 +75,16 @@ export function App() {
   };
 
   const handleSolicitarMantenimiento = () => setActiveTab('maintenance');
+  const handleCerrarSesion = useCallback(async () => {
+  try {
+    await api.salir();
+    setUsuario(null);
+    setResumen(null);
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error);
+    alert('No se pudo cerrar la sesión. Inténtalo nuevamente.');
+  }
+}, []);
 
   /**
    * Un estado sin filas no viene en `por_estado` —`GROUP BY` no devuelve grupos
@@ -101,14 +111,15 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-surface-alt text-ink flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        onOpenNewDeviceModal={() => setIsNewDeviceModalOpen(true)}
-        onOpenOnboardingModal={() => setIsOnboardingModalOpen(true)}
-      />
+     <Header
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      searchTerm={searchTerm}
+      setSearchTerm={setSearchTerm}
+      onOpenNewDeviceModal={() => setIsNewDeviceModalOpen(true)}
+      onOpenOnboardingModal={() => setIsOnboardingModalOpen(true)}
+      onCerrarSesion={handleCerrarSesion}
+    />
 
       <div className="flex-1 flex overflow-hidden max-w-[1920px] w-full mx-auto">
         <Sidebar

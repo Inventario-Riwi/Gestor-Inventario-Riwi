@@ -1,9 +1,9 @@
 import React from 'react';
-import { Search, Plus, PackageCheck } from 'lucide-react';
-
+import { Search, Plus, PackageCheck, LogOut } from 'lucide-react';
 import { LogoRiwiStock } from './LogoRiwiStock';
 
 interface HeaderProps {
+  onCerrarSesion: () => void;
   onOpenNewDeviceModal: () => void;
   onOpenOnboardingModal: () => void;
   activeTab: string;
@@ -19,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   searchTerm,
   setSearchTerm,
+  onCerrarSesion,
 }) => {
   return (
     <header className="bg-surface text-ink border-b border-line sticky top-0 z-40 shadow-sm">
@@ -83,6 +84,15 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* Quick Action: Add Device */}
+            <button
+            type="button"
+            onClick={onCerrarSesion}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium text-xs rounded-lg shadow-sm transition-colors"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Cerrar sesión</span>
+          </button>
             <button
               onClick={onOpenNewDeviceModal}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-brand hover:bg-brand-hover text-white font-medium text-xs rounded-lg shadow-sm transition-colors"
