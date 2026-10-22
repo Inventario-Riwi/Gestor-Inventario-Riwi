@@ -110,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 bg-nav border-r border-nav-line flex flex-col justify-between shrink-0 min-h-[calc(100vh-4rem)] p-4">
+    <aside className="fixed left-0 top-16 bottom-0 w-64 bg-nav border-r border-nav-line flex flex-col justify-between p-4 overflow-y-auto overflow-x-hidden z-40">
       <div className="space-y-4">
         {/* La marca. El cuadro llevaba un cuadrado blanco de relleno, que era
             lo que el prototipo puso donde iría un logo. */}

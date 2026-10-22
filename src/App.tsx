@@ -129,7 +129,7 @@ export function App() {
           maintenanceCount={enMantenimiento}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-surface-alt space-y-8">
+      <main className="ml-[18rem] mt-6 min-w-0 flex-1 px-6 pt-4">
           {/* Conectada: pide su resumen agregado por su cuenta. */}
           {activeTab === 'dashboard' && (
             <DashboardView
