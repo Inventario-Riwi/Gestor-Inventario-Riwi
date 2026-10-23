@@ -18,6 +18,7 @@ import { after, before, describe, it } from 'node:test';
 import {
   ambito,
   arrancar,
+  auditoriaDe,
   borrarEmpleados,
   borrarEquipos,
   Cliente,
@@ -1028,5 +1029,86 @@ describe('infraestructura: un switch no se le entrega a nadie', () => {
       'la base tendría que haber parado esto',
     );
     assert.equal(await estadoDe(id), 'Asignado');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La ficha del equipo: editar sus datos y ver su historial
+// ---------------------------------------------------------------------------
+
+describe('ficha: editar los datos del equipo y leer su historial', () => {
+  const suite = ambito('ficha');
+  let admin: UsuarioDePrueba;
+  let sede: string;
+  let persona: string;
+  const creados: string[] = [];
+  let c: Cliente;
+  const nombre = `${suite.prefijo}Persona Historial`;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    sede = await primeraSede();
+    persona = await crearEmpleado(nombre);
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await borrarEmpleados([persona]);
+    await suite.limpiar();
+  });
+
+  const crear = async (sufijo: string) => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}${sufijo}`,
+      serial: `SN-${suite.prefijo}${sufijo}`,
+      marca: 'Dell',
+      estado: 'Disponible',
+      sede_id: sede,
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    return id;
+  };
+
+  it('los campos del formulario se guardan, y la auditoría lleva solo lo que cambió', async () => {
+    const id = await crear('EDIT');
+    const cambios = {
+      empresa: 'Emerald Fire',
+      licencia_tipo: 'OEM',
+      sistema_operativo: 'Windows 11 Pro',
+      serial_cargador: `CG-${suite.prefijo}`,
+      tamano_pantalla: '14"',
+    };
+    const r = await c.patch(`/api/equipos/${id}`, cambios);
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    const { equipo } = r.cuerpo as { equipo: Record<string, unknown> };
+    for (const [k, v] of Object.entries(cambios)) assert.equal(equipo[k], v, `no guardó ${k}`);
+
+    const { filas } = await auditoriaDe(id, 'actualizar');
+    assert.equal(filas.length, 1, 'un PATCH, una fila de auditoría');
+    const despues = filas[0].despues as Record<string, unknown>;
+    assert.deepEqual(Object.keys(despues).sort(), Object.keys(cambios).sort(),
+      'la auditoría registró campos que no cambiaron');
+    assert.ok(!('marca' in despues), 'marca no se tocó y aparece igual');
+  });
+
+  it('el historial lista el movimiento con los nombres, lo más reciente arriba', async () => {
+    const id = await crear('HIST');
+    const asignar = await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    assert.equal(asignar.estado, 200, JSON.stringify(asignar.cuerpo));
+
+    const r = await c.get(`/api/equipos/${id}/historial`);
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    const { movimientos } = r.cuerpo as {
+      movimientos: { tipo: string; empleado_destino: string | null; usuario: string | null }[];
+    };
+    assert.ok(movimientos.length >= 2, 'faltan el alta o la asignación');
+    assert.equal(movimientos[0].tipo, 'Asignación', 'lo más reciente no va primero');
+    assert.equal(movimientos[0].empleado_destino, nombre, 'el historial no trae el nombre');
+    assert.ok(movimientos[0].usuario, 'no dice quién lo registró');
   });
 });

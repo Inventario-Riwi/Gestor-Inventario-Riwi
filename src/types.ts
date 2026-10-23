@@ -540,6 +540,34 @@ export const PAISES: Pais[] = ['Colombia', 'Estados Unidos'];
 export const ESTADOS_PARTE_ABIERTO = ['Pendiente', 'En taller', 'Completado'] as const;
 export type EstadoParteAbierto = (typeof ESTADOS_PARTE_ABIERTO)[number];
 
+/**
+ * Lo que se puede cambiar de un equipo desde su ficha (`PATCH /api/equipos/:id`).
+ *
+ * Sin estado, responsable ni sede: esos se mueven con una operación, que es
+ * lo que deja el movimiento en el historial (D19). Sin notas: tienen su propio
+ * editor (`NotasEquipo`), que protege el rastro del importador.
+ */
+export interface CambiosEquipo {
+  categoria?: CategoriaEquipo;
+  etiqueta?: string | null;
+  nombre_equipo?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  serial?: string | null;
+  serial_cargador?: string | null;
+  empresa?: Empresa;
+  propiedad?: PropiedadEquipo;
+  sistema_operativo?: string | null;
+  licencia_tipo?: TipoLicencia | null;
+  procesador?: string | null;
+  ram?: string | null;
+  disco?: string | null;
+  tamano_pantalla?: string | null;
+  condicion?: CondicionEquipo | null;
+  costo?: string | null;
+  notas?: string | null;
+}
+
 /** Lo que hace falta para dar de alta o editar a un colaborador. */
 export interface DatosEmpleado {
   nombre: string;
@@ -570,6 +598,7 @@ export type CategoriaEquipo = FilaEquipo['categoria'];
 export type EstadoEquipo = FilaEquipo['estado'];
 export type CondicionEquipo = NonNullable<FilaEquipo['condicion']>;
 export type PropiedadEquipo = FilaEquipo['propiedad'];
+export type TipoLicencia = NonNullable<FilaEquipo['licencia_tipo']>;
 export type LicenciaTipo = NonNullable<FilaEquipo['licencia_tipo']>;
 export type EstadoEmpleado = Empleado['estado'];
 export type RolUsuario = 'admin' | 'tecnico';
@@ -622,6 +651,8 @@ export const CONDICIONES_EQUIPO = [
 
 export const PROPIEDADES_EQUIPO = ['Empresa', 'Cliente', 'Empleado'] as const;
 
+export const TIPOS_LICENCIA = ['RETAIL', 'OEM', 'Sin licencia', 'No aplica'] as const;
+
 export const ESTADOS_EMPLEADO = ['Activo', 'Onboarding', 'Offboarding', 'Inactivo'] as const;
 
 // Si alguien añade un valor al enum de la base y no lo añade aquí —o al revés—
@@ -631,6 +662,7 @@ type _c2 = Comprobar<Igual<(typeof ESTADOS_EQUIPO)[number], EstadoEquipo>>;
 type _c3 = Comprobar<Igual<(typeof CONDICIONES_EQUIPO)[number], CondicionEquipo>>;
 type _c4 = Comprobar<Igual<(typeof PROPIEDADES_EQUIPO)[number], PropiedadEquipo>>;
 type _c5 = Comprobar<Igual<(typeof ESTADOS_EMPLEADO)[number], EstadoEmpleado>>;
+type _c13 = Comprobar<Igual<(typeof TIPOS_LICENCIA)[number], TipoLicencia>>;
 
 // Y estos dos porque `Empresa` y `Prestatario` sí están escritos a mano: son
 // enums de la base que no cuelgan de ninguna columna de las que `Serializado`

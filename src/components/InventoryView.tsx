@@ -6,6 +6,7 @@ import {
   Filter,
   Laptop,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -25,6 +26,8 @@ import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
+import { EditarEquipo } from './EditarEquipo';
+import { HistorialEquipo } from './HistorialEquipo';
 import { NotasEquipo } from './NotasEquipo';
 import { ResolverMotivos } from './ResolverMotivos';
 
@@ -747,72 +750,106 @@ const ErrorDeCarga: React.FC<{ error: ErrorApi; onReintentar: () => void }> = ({
   );
 };
 
+/**
+ * «512» → «512 GB». Solo si el valor es un número a secas: lo que ya trae
+ * unidad («16GB», «1 TB») o es otra cosa («SSD 512») se enseña tal cual.
+ */
+const conGB = (v: string | null) => (v && /^\d+(\.\d+)?$/.test(v.trim()) ? `${v.trim()} GB` : v);
+
 const Detalle: React.FC<{
   equipo: EquipoConMotivos;
   sede: string;
   onCerrar: () => void;
   /** Una mutación cambia el equipo y los conteos: hay que recargar el listado. */
   onMutado: (equipo: EquipoConMotivos) => void;
-}> = ({ equipo, sede, onCerrar, onMutado }) => (
-  <div
-    className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4"
-    onClick={onCerrar}
-  >
+}> = ({ equipo, sede, onCerrar, onMutado }) => {
+  const [editando, setEditando] = useState(false);
+
+  return (
     <div
-      className="bg-surface border border-line rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[85vh] overflow-y-auto"
-      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4"
+      onClick={onCerrar}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-ink">{nombreDe(equipo)}</h2>
-          <p className="text-sm text-ink-muted font-mono">{equipo.etiqueta ?? 'sin etiqueta'}</p>
-        </div>
-        <button onClick={onCerrar} className="p-2 text-ink-muted hover:text-ink">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Antes esto solo listaba los motivos. Ahora también los cierra: ver
-          `ResolverMotivos`. Una bandeja que solo se lee no se vacía nunca. */}
-      <ResolverMotivos equipo={equipo} onCambiado={onMutado} />
-
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        {(
-          [
-            ['Categoría', equipo.categoria],
-            ['Estado', equipo.estado],
-            ['Serial', equipo.serial],
-            ['Marca', equipo.marca],
-            ['Modelo', equipo.modelo],
-            ['Sede', sede],
-            ['Empresa', equipo.empresa],
-            ['Prestado a', equipo.prestado_a],
-            ['Propiedad', equipo.propiedad],
-            ['Sistema operativo', equipo.sistema_operativo],
-            ['Licencia', equipo.licencia_tipo],
-            ['Procesador', equipo.procesador],
-            ['RAM', equipo.ram],
-            ['Disco', equipo.disco],
-            ['Pantalla', equipo.tamano_pantalla],
-            ['Condición', equipo.condicion],
-          ] as const
-        ).map(([etiqueta, valor]) => (
-          <div key={etiqueta}>
-            <dt className="text-xs text-ink-muted">{etiqueta}</dt>
-            <dd className="text-ink">{valor ?? '—'}</dd>
+      <div
+        className="bg-surface border border-line rounded-xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-ink">{nombreDe(equipo)}</h2>
+            <p className="text-sm text-ink-muted font-mono">{equipo.etiqueta ?? 'sin etiqueta'}</p>
           </div>
-        ))}
-      </dl>
+          <div className="flex items-center gap-1">
+            {!editando && (
+              <button
+                onClick={() => setEditando(true)}
+                className="px-2.5 py-1.5 text-xs border border-line rounded-lg text-ink hover:bg-surface-alt flex items-center gap-1"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Editar datos
+              </button>
+            )}
+            <button onClick={onCerrar} className="p-2 text-ink-muted hover:text-ink" aria-label="Cerrar">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
-      {/* Editables desde la 5c, con lo del importador protegido aparte. */}
-      <NotasEquipo equipo={equipo} onGuardado={onMutado} />
+        {/* Antes esto solo listaba los motivos. Ahora también los cierra: ver
+            `ResolverMotivos`. Una bandeja que solo se lee no se vacía nunca. */}
+        <ResolverMotivos equipo={equipo} onCambiado={onMutado} />
 
-      {/* La clave BIOS y el serial de Windows no están aquí: no salen en ningún
-          listado ni detalle (§5.2). Solo por GET /api/equipos/:id/bios, con rol
-          admin y dejando fila en auditoria. */}
+        {editando ? (
+          <EditarEquipo
+            equipo={equipo}
+            onCancelar={() => setEditando(false)}
+            onGuardado={(e) => {
+              setEditando(false);
+              onMutado(e);
+            }}
+          />
+        ) : (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            {(
+              [
+                ['Categoría', equipo.categoria],
+                ['Estado', equipo.estado],
+                ['Serial', equipo.serial],
+                ['Marca', equipo.marca],
+                ['Modelo', equipo.modelo],
+                ['Sede', sede],
+                ['Empresa', etiquetaEmpresa(equipo.empresa)],
+                ['Prestado a', equipo.prestado_a && etiquetaEmpresa(equipo.prestado_a)],
+                ['Propiedad', equipo.propiedad],
+                ['Sistema operativo', equipo.sistema_operativo],
+                ['Licencia', equipo.licencia_tipo],
+                ['Procesador', equipo.procesador],
+                ['RAM', conGB(equipo.ram)],
+                ['Disco', conGB(equipo.disco)],
+                ['Pantalla', equipo.tamano_pantalla],
+                ['Condición', equipo.condicion],
+              ] as const
+            ).map(([etiqueta, valor]) => (
+              <div key={etiqueta}>
+                <dt className="text-xs text-ink-muted">{etiqueta}</dt>
+                <dd className="text-ink">{valor ?? '—'}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
-      {/* Las seis mutaciones. Qué botones se pintan lo decide el servidor. */}
-      <AccionesEquipo equipo={equipo} onHecho={onMutado} />
+        {/* Editables desde la 5c, con lo del importador protegido aparte. */}
+        <NotasEquipo equipo={equipo} onGuardado={onMutado} />
+
+        {/* La clave BIOS y el serial de Windows no están aquí: no salen en ningún
+            listado ni detalle (§5.2). Solo por GET /api/equipos/:id/bios, con rol
+            admin y dejando fila en auditoria. */}
+
+        {/* Las seis mutaciones. Qué botones se pintan lo decide el servidor. */}
+        <AccionesEquipo equipo={equipo} onHecho={onMutado} />
+
+        <HistorialEquipo equipo={equipo} />
+      </div>
     </div>
-  </div>
-);
+  );
+};

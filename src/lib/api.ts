@@ -10,6 +10,7 @@
 import type {
   ActaEmitida,
   ActaResumen,
+  CambiosEquipo,
   CatalogoTransiciones,
   DatosEmpleado,
   EstadoParteAbierto,
@@ -184,7 +185,7 @@ export const api = {
    * Editar la FICHA. `estado`, `empleado_id` y `sede_id` los rechaza el
    * servidor con 409 (D19): esos salen de una operación, no de un formulario.
    */
-  actualizarEquipo: (id: string, cambios: Partial<Omit<NuevoEquipo, 'estado'>>) =>
+  actualizarEquipo: (id: string, cambios: CambiosEquipo) =>
     pedir<{ equipo: EquipoConMotivos }>(`/api/equipos/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(cambios),
