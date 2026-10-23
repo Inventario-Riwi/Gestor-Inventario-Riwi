@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -23,6 +23,7 @@ import type {
 import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
+import { useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
 import { NotasEquipo } from './NotasEquipo';
 import { ResolverMotivos } from './ResolverMotivos';
@@ -108,28 +109,54 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const porPagina = 25;
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError(null);
+  /**
+   * Cuál fue la última petición. Con el sondeo hay dos fuentes de recargas, y
+   * una respuesta vieja —filtros de antes— no puede pisar a una más nueva.
+   */
+  const ultimoPedido = useRef(0);
+
+  /**
+   * `silencioso`: la recarga del sondeo. Sin indicador de carga, y si falla
+   * deja la tabla como estaba en vez de vaciarla: un tic perdido no es un
+   * error que enseñar, el siguiente lo reintenta.
+   */
+  const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    const pedido = ++ultimoPedido.current;
+    if (!silencioso) {
+      setCargando(true);
+      setError(null);
+    }
     try {
       const filtros = { estado, categoria, sede, empresa, q: searchTerm, pagina, porPagina };
       const datos =
         pestana === 'revision'
           ? await api.revision({ ...filtros, motivo })
           : await api.equipos(filtros);
+      if (pedido !== ultimoPedido.current) return;
       setFilas(datos.filas);
       setTotal(datos.total);
       // Solo la bandeja trae los conteos por motivo; el listado general no.
       if ('conteos' in datos) setConteos(datos.conteos as ConteoMotivo[]);
       setConteosEmpresa(datos.conteos_empresa);
+      setError(null);
+      // La ficha abierta se pone al día solo si de verdad cambió: así no se
+      // reinicia lo que se está escribiendo en ella por un tic sin novedades.
+      setSeleccionado((sel) => {
+        if (!sel) return sel;
+        const nueva = datos.filas.find((f) => f.id === sel.id);
+        return nueva && nueva.updated_at !== sel.updated_at ? nueva : sel;
+      });
     } catch (e) {
+      if (silencioso || pedido !== ultimoPedido.current) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, 'Error desconocido'));
       setFilas([]);
       setTotal(0);
     } finally {
-      setCargando(false);
+      if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
   }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, pagina]);
+
+  useSondeo(() => cargar({ silencioso: true }));
 
   const cerrarBloque = async () => {
     if (!motivo || !enBloque) return;
@@ -191,7 +218,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={cargar}
+            onClick={() => void cargar()}
             disabled={cargando}
             className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
           >
@@ -497,7 +524,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           -------------------------------------------------------------------- */}
 
       {error ? (
-        <ErrorDeCarga error={error} onReintentar={cargar} />
+        <ErrorDeCarga error={error} onReintentar={() => void cargar()} />
       ) : cargando && filas.length === 0 ? (
         <div className="border border-line rounded-xl bg-surface p-12 flex flex-col items-center gap-3 text-ink-muted">
           <Loader2 className="w-6 h-6 animate-spin text-brand" />

@@ -8,6 +8,7 @@ import type {
   UsuarioSesion,
 } from './types';
 import { api } from './lib/api';
+import { useSondeo } from './lib/sondeo';
 import { Login } from './components/Login';
 
 import { Header } from './components/Header';
@@ -58,6 +59,11 @@ export function App() {
   useEffect(() => {
     if (usuario) recargarResumen();
   }, [usuario, recargarResumen]);
+
+  // Los contadores de la barra lateral, al día con lo que hacen otros. Si un
+  // tic falla se conserva el último resumen: `null` diría «no se sabe», y un
+  // tic perdido no es eso.
+  useSondeo(() => (usuario ? api.resumenEquipos().then(setResumen) : undefined));
 
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState<boolean>(false);
   /**

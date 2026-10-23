@@ -17,6 +17,7 @@ import type {
   MantenimientoConEquipo,
 } from '../types';
 import { ESTADOS_PARTE_ABIERTO } from '../types';
+import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
@@ -82,21 +83,28 @@ export const MaintenanceView: React.FC = () => {
   /** Qué parte está preguntando su desenlace. `desenlace` no tiene defecto. */
   const [cerrando, setCerrando] = useState<string | null>(null);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError(null);
+  /** `silencioso`: la recarga del sondeo; si falla, deja lo que había. */
+  const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    if (!silencioso) {
+      setCargando(true);
+      setError(null);
+    }
     try {
       const d = await api.mantenimientos({ porPagina: 100 });
       setFilas(d.filas);
       setTotal(d.total);
+      setError(null);
     } catch (e) {
+      if (silencioso) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, 'Error desconocido'));
       setFilas([]);
       setTotal(0);
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   }, []);
+
+  useSondeo(() => cargar({ silencioso: true }));
 
   useEffect(() => {
     void cargar();
@@ -146,7 +154,7 @@ export const MaintenanceView: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={cargar}
+            onClick={() => void cargar()}
             disabled={cargando}
             className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
           >
@@ -178,7 +186,7 @@ export const MaintenanceView: React.FC = () => {
       )}
 
       {error ? (
-        <ErrorDeCarga error={error} que="los partes de mantenimiento" onReintentar={cargar} />
+        <ErrorDeCarga error={error} que="los partes de mantenimiento" onReintentar={() => void cargar()} />
       ) : cargando && filas.length === 0 ? (
         <Cargando que="los partes de mantenimiento" />
       ) : filas.length === 0 ? (

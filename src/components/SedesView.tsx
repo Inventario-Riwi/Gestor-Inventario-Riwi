@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import type { SedeConConteos, TrasladoAbierto } from '../types';
+import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
@@ -47,9 +48,12 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError(null);
+  /** `silencioso`: la recarga del sondeo; si falla, deja lo que había. */
+  const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    if (!silencioso) {
+      setCargando(true);
+      setError(null);
+    }
     try {
       // Las dos a la vez: los conteos por sede y los traslados abiertos salen
       // de la misma condición y tienen que verse en el mismo instante. En
@@ -59,14 +63,18 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
       setSedes(d.sedes);
       setSinSede(d.equipos_sin_sede);
       setTraslados(t.traslados);
+      setError(null);
     } catch (e) {
+      if (silencioso) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, 'Error desconocido'));
       setSedes([]);
       setTraslados([]);
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   }, []);
+
+  useSondeo(() => cargar({ silencioso: true }));
 
   const confirmar = useCallback(
     async (traslado: TrasladoAbierto) => {
@@ -104,7 +112,7 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
           <p className="text-sm text-ink-muted mt-1">Equipos y personas por sede.</p>
         </div>
         <button
-          onClick={cargar}
+          onClick={() => void cargar()}
           disabled={cargando}
           className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
         >
@@ -114,7 +122,7 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
       </header>
 
       {error ? (
-        <ErrorDeCarga error={error} que="las sedes" onReintentar={cargar} />
+        <ErrorDeCarga error={error} que="las sedes" onReintentar={() => void cargar()} />
       ) : cargando && sedes.length === 0 ? (
         <Cargando que="las sedes" />
       ) : sedes.length === 0 ? (

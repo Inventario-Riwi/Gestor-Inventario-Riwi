@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Building,
@@ -20,6 +20,7 @@ import {
 
 import type { DatosEmpleado, EmpleadoConConteo, Empresa, EquipoResumen, Sede } from '../types';
 import { EMPRESAS, ESTADOS_EMPLEADO, PAISES } from '../types';
+import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
@@ -110,9 +111,16 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   const porPagina = 24;
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError(null);
+  /** Para que una respuesta vieja —filtros de antes— no pise a una nueva. */
+  const ultimoPedido = useRef(0);
+
+  /** `silencioso`: la recarga del sondeo; si falla, deja lo que había. */
+  const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    const pedido = ++ultimoPedido.current;
+    if (!silencioso) {
+      setCargando(true);
+      setError(null);
+    }
     try {
       const datos = await api.empleados({
         q,
@@ -122,20 +130,25 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         pagina,
         porPagina,
       });
+      if (pedido !== ultimoPedido.current) return;
       setFilas(datos.filas);
       setTotal(datos.total);
       // Los conteos son del total, no de la página ni del filtro: es lo que
       // hace que «Sin clasificar: 113» siga viéndose mientras se mira RIWI.
       setConteos(datos.conteos_empresa);
+      setError(null);
     } catch (e) {
+      if (silencioso || pedido !== ultimoPedido.current) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, 'Error desconocido'));
       setFilas([]);
       setTotal(0);
       setConteos(null);
     } finally {
-      setCargando(false);
+      if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
   }, [q, sede, empresa, soloActivos, pagina]);
+
+  useSondeo(() => cargar({ silencioso: true }));
 
   const desactivar = useCallback(
     async (emp: EmpleadoConConteo) => {
@@ -247,7 +260,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={cargar}
+            onClick={() => void cargar()}
             disabled={cargando}
             className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
           >
@@ -369,7 +382,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       </div>
 
       {error ? (
-        <ErrorDeCarga error={error} que="los colaboradores" onReintentar={cargar} />
+        <ErrorDeCarga error={error} que="los colaboradores" onReintentar={() => void cargar()} />
       ) : cargando && filas.length === 0 ? (
         <Cargando que="los colaboradores" />
       ) : visibles.length === 0 ? (

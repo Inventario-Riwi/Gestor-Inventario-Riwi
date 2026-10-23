@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { CategoriaEquipo, EstadoEquipo, ResumenEquipos } from '../types';
+import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga } from './EstadoCarga';
 import { 
@@ -62,17 +63,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<ErrorApi | null>(null);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError(null);
+  /** `silencioso`: la recarga del sondeo; si falla, deja lo que había. */
+  const cargar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    if (!silencioso) {
+      setCargando(true);
+      setError(null);
+    }
     try {
       setResumen(await api.resumenEquipos());
+      setError(null);
     } catch (e) {
+      if (silencioso) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, String(e)));
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   }, []);
+
+  useSondeo(() => cargar({ silencioso: true }));
 
   useEffect(() => {
     void cargar();
@@ -80,7 +88,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   if (cargando) return <Cargando que="el resumen del inventario" />;
   if (error) {
-    return <ErrorDeCarga error={error} que="el resumen del inventario" onReintentar={cargar} />;
+    return <ErrorDeCarga error={error} que="el resumen del inventario" onReintentar={() => void cargar()} />;
   }
   if (!resumen) return null;
 
