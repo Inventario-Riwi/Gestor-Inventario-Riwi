@@ -126,7 +126,7 @@ export const estadoEquipo = pgEnum('estado_equipo', [
  * lo usa `empleados.empresa`, y su conteo de «Sin clasificar» solo funciona
  * mientras las claves posibles sean exactamente tres.
  */
-export const prestatario = pgEnum('prestatario', ['RIWI', 'BBL Labs', 'ISF']);
+export const prestatario = pgEnum('prestatario', ['RIWI', 'BBL Labs', 'ISF', 'Emerald Fire']);
 
 /**
  * `Usado` no estaba en el §2. Lo exige la hoja de periféricos, que trae 48
@@ -189,7 +189,7 @@ export const estadoMantenimiento = pgEnum('estado_mantenimiento', [
 ]);
 
 /** D28. `Sin clasificar` es de partida, no un valor de relleno. */
-export const empresaEmpleado = pgEnum('empresa', ['RIWI', 'BBL Labs', 'Sin clasificar']);
+export const empresaEmpleado = pgEnum('empresa', ['RIWI', 'BBL Labs', 'Sin clasificar', 'Emerald Fire']);
 
 /** Los estados de un parte con el equipo todavía en el taller. */
 export const ESTADOS_PARTE_ABIERTO = ['Pendiente', 'En taller', 'Completado'] as const;

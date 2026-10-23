@@ -1381,6 +1381,42 @@ describe('actas: una persona sin empresa no puede recibir un acta', () => {
   });
 
   /**
+   * Emerald Fire (0021) SÍ es empresa, pero no tiene formato de acta aprobado.
+   * También 409, y con un mensaje distinto: decirle «no tiene empresa
+   * asignada» a alguien que la tiene mandaría a quien emite a cambiársela, que
+   * es falsear de quién es el equipo para sacar el papel.
+   */
+  it('emitir para alguien de Emerald Fire es 409 por falta de formato, sin gastar número', async () => {
+    const deEmerald = await crearEmpleado(`${suite.prefijo}emerald`, 'Emerald Fire');
+    try {
+      const id = await equipoAsignadoA(deEmerald, 'EF1');
+      const antesRiwi = await consecutivoActual('RIWI');
+      const antesBbl = await consecutivoActual('BBL Labs');
+
+      const r = await c.post('/api/actas', {
+        tipo: 'Entrega',
+        empleado_id: deEmerald,
+        equipos: [id],
+      });
+
+      assert.equal(r.estado, 409, JSON.stringify(r.cuerpo));
+      const cuerpo = r.cuerpo as { error: string; empleado_id?: string; falta?: string };
+      assert.equal(cuerpo.falta, 'formato');
+      assert.equal(cuerpo.empleado_id, deEmerald);
+      assert.match(cuerpo.error, /Emerald Fire/);
+      assert.doesNotMatch(cuerpo.error, /no tiene empresa/i, 'la tiene: el mensaje mentiría');
+
+      assert.equal(await consecutivoActual('RIWI'), antesRiwi, 'gastó número de RIWI');
+      assert.equal(await consecutivoActual('BBL Labs'), antesBbl, 'gastó número de BBL');
+      assert.equal(await consecutivoActual('Emerald Fire'), null, 'abrió una serie que no existe');
+    } finally {
+      // El equipo va primero: un empleado con un equipo asignado no se borra.
+      await borrarEquipos(creados.splice(0));
+      await borrarEmpleados([deEmerald]);
+    }
+  });
+
+  /**
    * Y lo que de verdad importa del 409: **no movió nada**.
    *
    * En modo `ejecutar` el acta hace la operación, así que una guarda puesta

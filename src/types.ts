@@ -517,12 +517,12 @@ export type MantenimientoConEquipo = Mantenimiento & {
  */
 export type EmpleadoConConteo = Empleado & { equipos_asignados: number };
 
-export type Empresa = 'RIWI' | 'BBL Labs' | 'Sin clasificar';
+export type Empresa = 'RIWI' | 'BBL Labs' | 'Emerald Fire' | 'Sin clasificar';
 
 /** A quién se le presta un equipo (D31). Enum propio, no el de `Empresa`. */
-export type Prestatario = 'RIWI' | 'BBL Labs' | 'ISF';
-export const PRESTATARIOS: Prestatario[] = ['RIWI', 'BBL Labs', 'ISF'];
-export const EMPRESAS: Empresa[] = ['RIWI', 'BBL Labs', 'Sin clasificar'];
+export type Prestatario = 'RIWI' | 'BBL Labs' | 'Emerald Fire' | 'ISF';
+export const PRESTATARIOS: Prestatario[] = ['RIWI', 'BBL Labs', 'Emerald Fire', 'ISF'];
+export const EMPRESAS: Empresa[] = ['RIWI', 'BBL Labs', 'Emerald Fire', 'Sin clasificar'];
 
 /** Los estados de un parte con el equipo todavía en el taller. */
 export const ESTADOS_PARTE_ABIERTO = ['Pendiente', 'En taller', 'Completado'] as const;

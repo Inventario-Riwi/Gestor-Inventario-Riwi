@@ -587,6 +587,17 @@ INSERT INTO hallazgo
 SELECT 'H', 'contador de una serie que no puede emitir', count(*)
 FROM actas_consecutivo c WHERE c.empresa = 'Sin clasificar';
 
+-- Emerald Fire (0021) es empresa pero no emite: no tiene formato aprobado. Lo
+-- impide `EmpresaSinFormato` en el repositorio; aquí, que lo cargado lo cumple.
+-- Cuando tenga formato, estas dos líneas se van con el cambio que le da prefijo.
+INSERT INTO hallazgo
+SELECT 'H', 'actas de una empresa sin formato aprobado', count(*)
+FROM actas a WHERE a.empresa = 'Emerald Fire';
+
+INSERT INTO hallazgo
+SELECT 'H', 'contador de una empresa sin formato aprobado', count(*)
+FROM actas_consecutivo c WHERE c.empresa = 'Emerald Fire';
+
 -- Y el prefijo tiene que ser el de SU empresa. Sin esto, un acta de BBL podría
 -- llevar número de la serie de RIWI: dos documentos legales distintos con el
 -- mismo número, que es justo lo que el prefijo vino a evitar.

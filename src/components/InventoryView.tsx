@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
+import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { AccionesEquipo } from './AccionesEquipo';
 import { NotasEquipo } from './NotasEquipo';
 import { ResolverMotivos } from './ResolverMotivos';
@@ -216,20 +217,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           {Object.entries(conteosEmpresa).map(([nombre, n]) => {
             const activa = empresa === nombre;
             const pendiente = nombre === 'Sin clasificar' && n > 0;
+            const estilo = estiloEmpresa(nombre);
             return (
               <button
                 key={nombre}
                 onClick={() => setEmpresa(activa ? '' : nombre)}
                 className={`px-3 py-1.5 text-xs rounded-lg border flex items-center gap-2 transition-colors ${
                   activa
-                    ? 'bg-brand text-white border-brand'
+                    ? (estilo?.activo ?? 'bg-brand text-white border-brand')
                     : pendiente
                       ? 'border-warn/50 bg-warn/10 text-ink hover:bg-warn/20'
-                      : 'border-line text-ink-muted hover:bg-surface-alt'
+                      : (estilo?.chip ?? 'border-line text-ink-muted hover:bg-surface-alt')
                 }`}
               >
                 {pendiente && <AlertTriangle className="w-3.5 h-3.5 text-warn" />}
-                {nombre}
+                {etiquetaEmpresa(nombre)}
                 <span className="font-semibold tabular-nums">{n}</span>
               </button>
             );

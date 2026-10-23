@@ -164,7 +164,12 @@ export async function conteoPorEmpresa(bd: BD = db): Promise<Record<string, numb
     .where(eq(empleados.activo, true))
     .groupBy(empleados.empresa);
 
-  const base: Record<string, number> = { RIWI: 0, 'BBL Labs': 0, 'Sin clasificar': 0 };
+  const base: Record<string, number> = {
+    RIWI: 0,
+    'BBL Labs': 0,
+    'Emerald Fire': 0,
+    'Sin clasificar': 0,
+  };
   for (const f of filas) base[f.empresa] = f.n;
   return base;
 }

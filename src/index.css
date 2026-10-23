@@ -26,6 +26,16 @@
   --color-danger:       #F4593F;
   --color-info:         #DDA5F2;
 
+  /* Empresas. Cada una con su color para distinguirlas de un vistazo.
+     Texto del color sobre su -subtle: RIWI 4.96:1, Blackbird 4.69:1,
+     Emerald Fire 5.15:1. Blanco sobre el color: 5.77, 5.35 y 5.97. */
+  --color-riwi:                #5B4FE0;
+  --color-riwi-subtle:         #EEECFC;
+  --color-blackbird:           #157A4E;
+  --color-blackbird-subtle:    #E3F4EC;
+  --color-emerald-fire:        #0862C0;
+  --color-emerald-fire-subtle: #E3F0FC;
+
   /* Entrada de los modales.
      Antes se pedia con `animate-in fade-in`, de `tailwindcss-animate`, que
      nunca estuvo instalado: las dos clases no emitian ninguna regla y los

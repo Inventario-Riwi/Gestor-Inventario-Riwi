@@ -103,6 +103,25 @@ export class EmpresaSinAsignar extends Error {
     );
   }
 }
+
+/**
+ * La persona SÍ tiene empresa, pero esa empresa no tiene formato de acta
+ * aprobado (hoy, Emerald Fire). No se arregla cambiándole la empresa: sería
+ * mentir sobre de quién es el equipo para poder sacar un papel. Se arregla
+ * cuando haya formato, y por eso el mensaje no ofrece ninguna acción.
+ */
+export class EmpresaSinFormato extends Error {
+  constructor(
+    readonly empleadoId: string,
+    readonly nombre: string,
+    readonly empresa: string,
+  ) {
+    super(
+      `${nombre} es de ${empresa}, y ${empresa} todavía no tiene formato de acta ` +
+        `aprobado: no se puede emitir un acta a su nombre.`,
+    );
+  }
+}
 export class EquipoNoEncontrado extends Error {}
 /** El equipo no tiene un movimiento de ese tipo con esa persona. */
 export class SinMovimientoQueDocumentar extends Error {}
@@ -391,7 +410,10 @@ export async function emitir(
      * numerarla sin un `as`.
      */
     if (!puedeEmitir(persona.empresa)) {
-      throw new EmpresaSinAsignar(persona.id, persona.nombre);
+      if (persona.empresa === 'Sin clasificar') {
+        throw new EmpresaSinAsignar(persona.id, persona.nombre);
+      }
+      throw new EmpresaSinFormato(persona.id, persona.nombre, persona.empresa);
     }
     const empresaDelActa: EmpresaQueEmite = persona.empresa;
 

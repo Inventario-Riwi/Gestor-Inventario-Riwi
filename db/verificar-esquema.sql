@@ -130,6 +130,35 @@ BEGIN
     INSERT INTO resultado VALUES ('CHECK: prestado a la otra empresa', 'aceptado', 'RECHAZADO');
   END;
 
+  -- 3e. Emerald Fire (0021) presta y recibe como las otras dos. Los dos
+  -- sentidos: si solo se probara uno, faltar en `prestatario` o en `empresa`
+  -- pasaría sin que nada se pusiera rojo.
+  BEGIN
+    INSERT INTO equipos (categoria, estado, empresa, prestado_a)
+      VALUES ('Portátil', 'Prestado', 'Emerald Fire', 'RIWI');
+    INSERT INTO resultado VALUES ('Emerald Fire presta a RIWI', 'aceptado', 'aceptado');
+  EXCEPTION WHEN check_violation OR invalid_text_representation THEN
+    INSERT INTO resultado VALUES ('Emerald Fire presta a RIWI', 'aceptado', 'RECHAZADO');
+  END;
+
+  BEGIN
+    INSERT INTO equipos (categoria, estado, empresa, prestado_a)
+      VALUES ('Portátil', 'Prestado', 'BBL Labs', 'Emerald Fire');
+    INSERT INTO resultado VALUES ('BBL Labs presta a Emerald Fire', 'aceptado', 'aceptado');
+  EXCEPTION WHEN check_violation OR invalid_text_representation THEN
+    INSERT INTO resultado VALUES ('BBL Labs presta a Emerald Fire', 'aceptado', 'RECHAZADO');
+  END;
+
+  -- Y la regla de 3d la cubre también: la CHECK compara por texto, así que una
+  -- empresa nueva podría escaparse si la comparación fuera por lista.
+  BEGIN
+    INSERT INTO equipos (categoria, estado, empresa, prestado_a)
+      VALUES ('Portátil', 'Prestado', 'Emerald Fire', 'Emerald Fire');
+    INSERT INTO resultado VALUES ('CHECK: Emerald Fire prestado a sí misma', 'rechazado', 'ACEPTADO');
+  EXCEPTION WHEN check_violation THEN
+    INSERT INTO resultado VALUES ('CHECK: Emerald Fire prestado a sí misma', 'rechazado', 'rechazado');
+  END;
+
   -- 4. serial NULL repetido: varios vacíos conviven
   INSERT INTO equipos (categoria, estado, serial) VALUES ('Monitor', 'Disponible', NULL);
   INSERT INTO equipos (categoria, estado, serial) VALUES ('Monitor', 'Disponible', NULL);

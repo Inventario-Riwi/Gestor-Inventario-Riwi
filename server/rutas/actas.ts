@@ -239,6 +239,12 @@ export function registrarRutasActas(app: Express): void {
             falta: 'empresa',
           });
         }
+        if (e instanceof repoActas.EmpresaSinFormato) {
+          throw new ErrorHttp(409, e.message, {
+            empleado_id: e.empleadoId,
+            falta: 'formato',
+          });
+        }
 
         if (e instanceof repoActas.EmpleadoNoEncontrado) throw noEncontrado('Empleado');
         if (e instanceof repoActas.EquipoNoEncontrado) throw noEncontrado('Equipo');

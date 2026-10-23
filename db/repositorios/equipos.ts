@@ -130,10 +130,15 @@ export async function conteoPorEmpresa(bd: BD = db): Promise<Record<string, numb
           ) x
          GROUP BY x.empresa`,
   );
-  // Las tres de `empresa` SIEMPRE, aunque valgan cero (D28). ISF no: no es una
+  // Las cuatro de `empresa` SIEMPRE, aunque valgan cero (D28). ISF no: no es una
   // de nuestras empresas, solo existe mientras tenga algo prestado, y un chip
   // «ISF 0» permanente sería una categoría inventada.
-  const base: Record<string, number> = { RIWI: 0, 'BBL Labs': 0, 'Sin clasificar': 0 };
+  const base: Record<string, number> = {
+    RIWI: 0,
+    'BBL Labs': 0,
+    'Emerald Fire': 0,
+    'Sin clasificar': 0,
+  };
   for (const fila of r.rows) {
     const n = Number(fila.n);
     if (fila.empresa in base || n > 0) base[fila.empresa] = n;

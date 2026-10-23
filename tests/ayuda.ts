@@ -333,7 +333,10 @@ export async function marcarEquipo(id: string, motivos: string[]): Promise<void>
   });
 }
 
-export async function crearEmpleado(nombre: string, empresa?: 'RIWI' | 'BBL Labs' | 'Sin clasificar') {
+export async function crearEmpleado(
+  nombre: string,
+  empresa?: 'RIWI' | 'BBL Labs' | 'Emerald Fire' | 'Sin clasificar',
+) {
   const [fila] = await db
     .insert(empleados)
     .values(empresa ? { nombre, empresa } : { nombre })

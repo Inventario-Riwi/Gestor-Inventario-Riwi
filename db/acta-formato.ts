@@ -35,7 +35,7 @@ export const PLANTILLA_VERSION: Record<TipoActa, string> = {
 };
 
 export type TipoActa = 'Entrega' | 'Devolución';
-export type EmpresaActa = 'RIWI' | 'BBL Labs' | 'Sin clasificar';
+export type EmpresaActa = 'RIWI' | 'BBL Labs' | 'Emerald Fire' | 'Sin clasificar';
 
 /**
  * El logo, por empresa, leído de una **ruta fija del repo** (D39).
@@ -58,10 +58,15 @@ export type EmpresaActa = 'RIWI' | 'BBL Labs' | 'Sin clasificar';
  * `Sin clasificar` no tiene logo, y eso se ve como un hueco en el
  * encabezado. Es el mismo criterio que `delEntorno`: un acta con un espacio en
  * blanco no se firma por error; una con el logo de la otra empresa, sí.
+ *
+ * `Emerald Fire` tampoco tiene logo, y por el mismo motivo: no hay formato
+ * aprobado para ella. Hoy no llega a pintarse, porque `puedeEmitir` la deja
+ * fuera; cuando tenga formato, entra su logo y sube `PLANTILLA_VERSION`.
  */
 export const LOGOS: Record<EmpresaActa, string | null> = {
   RIWI: 'assets/logos/logo-riwi.png',
   'BBL Labs': 'assets/logos/logo-bbl.png',
+  'Emerald Fire': null,
   'Sin clasificar': null,
 };
 
@@ -82,6 +87,7 @@ export const LOGOS: Record<EmpresaActa, string | null> = {
 export const LOGO_RATIO: Record<EmpresaActa, number> = {
   RIWI: 4500 / 1246,
   'BBL Labs': 176 / 98,
+  'Emerald Fire': 1,
   'Sin clasificar': 1,
 };
 
@@ -136,8 +142,12 @@ export const SECCION_HISTORIAL = {
  * `PREFIJO_CONSECUTIVO`, cualquier código que intente numerar un acta de
  * `Sin clasificar` no compila. Un `Record<EmpresaActa, string>` con las tres
  * dejaba la puerta abierta a que alguien la usara sin enterarse.
+ *
+ * `Emerald Fire` queda fuera por otra razón: sí es una empresa, pero no tiene
+ * formato de acta aprobado ni logo. Cuando lo tenga, se quita de aquí y se le
+ * da prefijo; hasta entonces, numerarle un acta tampoco compila.
  */
-export type EmpresaQueEmite = Exclude<EmpresaActa, 'Sin clasificar'>;
+export type EmpresaQueEmite = Exclude<EmpresaActa, 'Sin clasificar' | 'Emerald Fire'>;
 
 /**
  * El prefijo de la serie de consecutivos, **una por empresa** (D40).

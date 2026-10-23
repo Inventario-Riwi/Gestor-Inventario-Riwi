@@ -437,6 +437,16 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
    */
   const faltaEmpresa = empleado !== null && empleado.empresa === 'Sin clasificar';
 
+  /**
+   * La persona tiene empresa, pero esa empresa no emite actas (Emerald Fire):
+   * no hay formato aprobado para ella. También bloquea, y no ofrece cambiarle
+   * la empresa: eso sería falsear de quién es para poder sacar el papel.
+   */
+  const sinFormato =
+    empleado !== null &&
+    !faltaEmpresa &&
+    !(EMPRESAS_QUE_EMITEN as string[]).includes(empleado.empresa);
+
   const asignarEmpresa = async () => {
     if (!empleado || !empresaNueva) return;
     setAsignandoEmpresa(true);
@@ -984,6 +994,18 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
             </div>
           )}
 
+          {sinFormato && empleado && (
+            <div className="text-xs bg-danger/10 border border-danger/40 rounded-lg px-3 py-2">
+              <p className="text-ink flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-danger" />
+                <span>
+                  <strong>{empleado.nombre}</strong> es de {empleado.empresa}, que todavía no
+                  tiene formato de acta aprobado. No se puede emitir un acta a su nombre.
+                </span>
+              </p>
+            </div>
+          )}
+
           {/* ---------------------------------------------------------------
               La sección 3 del formato pide número de documento, y `cedula`
               casi no viene en los Excel.
@@ -1042,7 +1064,7 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
             </div>
             <button
               onClick={() => void emitir()}
-              disabled={emitiendo || !empleadoId || seleccionados.length === 0 || faltaEmpresa}
+              disabled={emitiendo || !empleadoId || seleccionados.length === 0 || faltaEmpresa || sinFormato}
               className="px-4 py-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shrink-0"
             >
               <FileSignature className="w-4 h-4" />

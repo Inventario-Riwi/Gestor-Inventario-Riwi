@@ -544,10 +544,51 @@ describe('equipos: el filtro por empresa incluye lo prestado (D31)', () => {
     assert.ok(!(await saleEn('Sin clasificar')), 'y nadie mas');
   });
 
-  it('los conteos por empresa vienen con el listado y traen las tres claves', async () => {
+  // 0021: Emerald Fire es dueña y prestataria como las otras dos. Se prueban
+  // los dos papeles, porque son dos enums y podría faltar en uno solo.
+  it('Emerald Fire presta y recibe prestado, y sale en las dos listas', async () => {
+    const crear = async (sufijo: string, empresa: string) => {
+      const r = await c.post('/api/equipos', {
+        categoria: 'Portátil',
+        etiqueta: `${suite.prefijo}${sufijo}`,
+        serial: `SN-${suite.prefijo}${sufijo}`,
+        estado: 'Disponible',
+        sede_id: sedeA,
+        empresa,
+      });
+      assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+      const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+      creados.push(id);
+      return id;
+    };
+    const saleEn = async (empresa: string, sufijo: string, id: string) => {
+      const p = await c.get(
+        `/api/equipos?empresa=${encodeURIComponent(empresa)}&q=${suite.prefijo}${sufijo}`,
+      );
+      return (p.cuerpo as { filas: { id: string }[] }).filas.some((f) => f.id === id);
+    };
+
+    const suyo = await crear('EFPRESTA', 'Emerald Fire');
+    const r1 = await c.post(`/api/equipos/${suyo}/prestar`, { prestado_a: 'BBL Labs' });
+    assert.equal(r1.estado, 200, JSON.stringify(r1.cuerpo));
+    assert.ok(await saleEn('Emerald Fire', 'EFPRESTA', suyo), 'la dueña tiene que verlo');
+    assert.ok(await saleEn('BBL Labs', 'EFPRESTA', suyo), 'y quien lo tiene prestado');
+
+    const ajeno = await crear('EFRECIBE', 'RIWI');
+    const r2 = await c.post(`/api/equipos/${ajeno}/prestar`, { prestado_a: 'Emerald Fire' });
+    assert.equal(r2.estado, 200, JSON.stringify(r2.cuerpo));
+    assert.ok(await saleEn('Emerald Fire', 'EFRECIBE', ajeno), 'quien lo recibe tiene que verlo');
+
+    // Y no se presta a sí misma: el lado que debe rechazar.
+    const propio = await crear('EFPROPIO', 'Emerald Fire');
+    const r3 = await c.post(`/api/equipos/${propio}/prestar`, { prestado_a: 'Emerald Fire' });
+    assert.notEqual(r3.estado, 200, 'se prestó a sí misma');
+  });
+
+  it('los conteos por empresa vienen con el listado y traen las cuatro claves', async () => {
     const p = await c.get('/api/equipos?porPagina=1');
     const { conteos_empresa } = p.cuerpo as { conteos_empresa: Record<string, number> };
-    for (const clave of ['RIWI', 'BBL Labs', 'Sin clasificar']) {
+    for (const clave of ['RIWI', 'BBL Labs', 'Emerald Fire', 'Sin clasificar']) {
       assert.ok(
         clave in conteos_empresa,
         `falta la clave "${clave}": GROUP BY no devuelve grupos vacios, y sin rellenarlos ` +
