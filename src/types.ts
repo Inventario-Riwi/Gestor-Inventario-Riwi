@@ -97,7 +97,14 @@ export type Equipo = Serializado<
 >;
 
 /** Detalle: incluye los motivos por los que está en la bandeja de revisión. */
-export type EquipoConMotivos = Equipo & { motivos_revision: string[] };
+export type EquipoConMotivos = Equipo & {
+  motivos_revision: string[];
+  /**
+   * Quién lo tiene: el nombre de `empleado_id`. Solo lo trae el listado; la
+   * ficha suelta no, y por eso es opcional en vez de afirmar que siempre está.
+   */
+  responsable_nombre?: string | null;
+};
 
 /** Lo que devuelve `GET /api/empleados/:id/equipos`. */
 export interface EquipoResumen {

@@ -461,7 +461,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Etiqueta, serial, nombre, marca o modelo…"
+            placeholder="Etiqueta, serial, nombre, marca, modelo o persona…"
             className="w-full pl-9 pr-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink focus:outline-none focus:border-brand"
           />
         </div>
@@ -548,6 +548,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <th className="text-left font-semibold px-4 py-3">Equipo</th>
                   <th className="text-left font-semibold px-4 py-3">Serial</th>
                   <th className="text-left font-semibold px-4 py-3">Estado</th>
+                  <th className="text-left font-semibold px-4 py-3">Responsable</th>
+                  <th className="text-left font-semibold px-4 py-3">Empresa</th>
                   <th className="text-left font-semibold px-4 py-3">Sede</th>
                   <th className="text-left font-semibold px-4 py-3">Revisión</th>
                 </tr>
@@ -588,14 +590,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <span className={`text-xs px-2 py-0.5 rounded-full ${colorEstado[e.estado]}`}>
                         {e.estado}
                       </span>
-                      {/* A quién, pegado al estado. «Prestado» a secas obliga a
-                          abrir la ficha para saber lo único que importa de un
-                          préstamo, y quien mira la lista de una empresa
-                          necesita distinguir de un vistazo lo suyo de lo que
-                          tiene en préstamo. */}
+                    </td>
+                    {/* Quién lo tiene. En un préstamo es quien lo tiene en la
+                        mano mientras dura, que es lo que `empleado_id` guarda. */}
+                    <td className="px-4 py-3 text-ink">
+                      {e.responsable_nombre ?? <span className="text-ink-muted">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-md border ${
+                          estiloEmpresa(e.empresa)?.chip ?? 'border-line text-ink-muted'
+                        }`}
+                      >
+                        {etiquetaEmpresa(e.empresa)}
+                      </span>
+                      {/* A quién se le prestó, pegado a su dueña: quien mira la
+                          lista de una empresa distingue de un vistazo lo suyo de
+                          lo que tiene en préstamo. */}
                       {e.prestado_a && (
-                        <div className="text-[11px] text-ink-muted mt-0.5">
-                          {e.empresa} → <strong className="text-ink">{e.prestado_a}</strong>
+                        <div className="text-[11px] text-ink-muted mt-1">
+                          Prestado a <strong className="text-ink">{etiquetaEmpresa(e.prestado_a)}</strong>
                         </div>
                       )}
                     </td>

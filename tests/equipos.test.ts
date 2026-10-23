@@ -599,6 +599,75 @@ describe('equipos: el filtro por empresa incluye lo prestado (D31)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// La tabla dice quién tiene cada equipo, y el buscador lo encuentra por persona
+// ---------------------------------------------------------------------------
+
+describe('equipos: el listado trae al responsable y se busca por persona', () => {
+  const suite = ambito('responsable');
+  let admin: UsuarioDePrueba;
+  let sede: string;
+  let persona: string;
+  const creados: string[] = [];
+  let c: Cliente;
+  /** Un nombre que no puede salir por casualidad en otra fila de la base. */
+  const nombre = `${suite.prefijo}Zuleima Prueba`;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    sede = await primeraSede();
+    persona = await crearEmpleado(nombre);
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await borrarEmpleados([persona]);
+    await suite.limpiar();
+  });
+
+  const crear = async (sufijo: string) => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}${sufijo}`,
+      serial: `SN-${suite.prefijo}${sufijo}`,
+      estado: 'Disponible',
+      sede_id: sede,
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    return id;
+  };
+
+  type Fila = { id: string; responsable_nombre: string | null };
+  const buscar = async (q: string) => {
+    const p = await c.get(`/api/equipos?q=${encodeURIComponent(q)}`);
+    assert.equal(p.estado, 200, JSON.stringify(p.cuerpo));
+    return (p.cuerpo as { filas: Fila[] }).filas;
+  };
+
+  it('un equipo asignado trae el nombre; uno libre, null', async () => {
+    const asignado = await crear('ASIG');
+    const libre = await crear('LIBRE');
+    const r = await c.post(`/api/equipos/${asignado}/asignar`, { empleado_id: persona });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+
+    const filas = await buscar(suite.prefijo);
+    assert.equal(filas.find((f) => f.id === asignado)?.responsable_nombre, nombre);
+    assert.equal(filas.find((f) => f.id === libre)?.responsable_nombre, null);
+  });
+
+  it('buscar por el nombre de la persona encuentra su equipo, y solo el suyo', async () => {
+    // Una parte del nombre, en minúsculas: así se busca de verdad.
+    const filas = await buscar('zuleima prueba');
+    const ids = filas.map((f) => f.id);
+    assert.ok(ids.includes(creados[0]), 'no encontró el equipo de la persona');
+    assert.ok(!ids.includes(creados[1]), 'trajo un equipo que no es suyo');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cerrar un motivo en todo su bloque
 // ---------------------------------------------------------------------------
 

@@ -31,6 +31,7 @@ import {
 } from '../motivos.js';
 import * as repoAuditoria from './auditoria.js';
 import {
+  empleados,
   empresaEmpleado,
   equipos,
   equiposMotivosRevision,
@@ -561,6 +562,11 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
       ilike(equipos.nombre_equipo, patron),
       ilike(equipos.marca, patron),
       ilike(equipos.modelo, patron),
+      // Por la persona que lo tiene: el buscador lo promete («…o persona»).
+      // EXISTS y no JOIN, como el filtro de motivo, y con las tablas
+      // calificadas a mano: drizzle no ve el ámbito de esta subconsulta.
+      sql`EXISTS (SELECT 1 FROM empleados e
+                   WHERE e.id = equipos.empleado_id AND e.nombre ILIKE ${patron})`,
     );
     if (busqueda) condiciones.push(busqueda);
   }
@@ -601,8 +607,25 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
     }
   }
 
+  // El nombre de quien tiene cada equipo, para la columna «Responsable». Una
+  // consulta aparte por los ids de la página, igual que los motivos: un JOIN
+  // en la consulta principal la haría depender de que drizzle recalifique bien.
+  const idsEmpleado = [...new Set(filas.map((f) => f.empleado_id).filter((x): x is string => !!x))];
+  const nombrePorId = new Map<string, string>();
+  if (idsEmpleado.length > 0) {
+    const personas = await bd
+      .select({ id: empleados.id, nombre: empleados.nombre })
+      .from(empleados)
+      .where(inArray(empleados.id, idsEmpleado));
+    for (const p of personas) nombrePorId.set(p.id, p.nombre);
+  }
+
   return {
-    filas: filas.map((f) => ({ ...f, motivos_revision: porEquipo.get(f.id) ?? [] })),
+    filas: filas.map((f) => ({
+      ...f,
+      motivos_revision: porEquipo.get(f.id) ?? [],
+      responsable_nombre: f.empleado_id ? (nombrePorId.get(f.empleado_id) ?? null) : null,
+    })),
     total,
     pagina,
     porPagina,
