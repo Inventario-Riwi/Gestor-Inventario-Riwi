@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import type { DatosEmpleado, EmpleadoConConteo, Empresa, EquipoResumen, Sede } from '../types';
-import { EMPRESAS, ESTADOS_EMPLEADO } from '../types';
+import { EMPRESAS, ESTADOS_EMPLEADO, PAISES } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
@@ -202,9 +202,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
    * lo causa, y cubre sola cualquier sede futura que tampoco sea una oficina.
    */
   const faltaDireccion = (emp: EmpleadoConConteo) => {
-    if (emp.direccion && emp.direccion.trim() !== '') return false;
     const s = sedes.find((x) => x.id === emp.sede_id);
-    return s !== undefined && s.ciudad === null;
+    if (s === undefined || s.ciudad !== null) return false;
+    // 0022: un remoto necesita también saber en qué ciudad está.
+    const lleno = (v: string | null) => v !== null && v.trim() !== '';
+    return !lleno(emp.direccion) || !lleno(emp.ciudad) || emp.pais === null;
+  };
+
+  /** «Remoto · Bogotá, Colombia» para un remoto; el nombre a secas si no. */
+  const ubicacion = (emp: EmpleadoConConteo) => {
+    const nombre = nombreSede(emp.sede_id);
+    const lugar = [emp.ciudad, emp.departamento, emp.pais].filter(Boolean).join(', ');
+    return lugar ? `${nombre} · ${lugar}` : nombre;
   };
 
   const visibles = estado ? filas.filter((e) => e.estado === estado) : filas;
@@ -417,7 +426,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                   {faltaDireccion(emp) && (
                     <p className="text-[11px] text-ink bg-warn/10 border border-warn/40 rounded px-2 py-1 flex items-start gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px text-warn" />
-                      Sin dirección, y su sede no tiene oficina: no hay a dónde enviarle un equipo.
+                      Remoto sin ubicación completa (país, ciudad y dirección): no hay a dónde
+                      enviarle un equipo.
                     </p>
                   )}
 
@@ -425,7 +435,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     <div className="flex items-center gap-1.5">
                       <Building className="w-3.5 h-3.5 shrink-0" />
                       <dd className="truncate">
-                        {nombreSede(emp.sede_id)} · {emp.empresa}
+                        {ubicacion(emp)} · {emp.empresa}
                       </dd>
                     </div>
                     {emp.email_corporativo && (
@@ -590,6 +600,9 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
     sede_id: empleado?.sede_id ?? '',
     telefono: empleado?.telefono ?? '',
     direccion: empleado?.direccion ?? '',
+    pais: empleado?.pais ?? null,
+    departamento: empleado?.departamento ?? '',
+    ciudad: empleado?.ciudad ?? '',
     empresa: empleado?.empresa ?? 'Sin clasificar',
   });
   const [enviando, setEnviando] = useState(false);
@@ -598,12 +611,31 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
   const poner = (campo: keyof DatosEmpleado, valor: string) =>
     setDatos((p) => ({ ...p, [campo]: valor }));
 
-  // El mismo aviso que en la tarjeta, en el sitio donde se puede arreglar.
   const sedeElegida = sedes.find((s) => s.id === datos.sede_id);
-  const avisarDireccion =
-    sedeElegida !== undefined &&
-    sedeElegida.ciudad === null &&
-    (datos.direccion ?? '').trim() === '';
+  const esRemota = sedeElegida !== undefined && sedeElegida.ciudad === null;
+
+  /**
+   * Qué falta de la ubicación de un remoto. Al ENTRAR a Remoto —alta o cambio
+   * de sede— bloquea, igual que la API; en una ficha que ya era remota solo
+   * avisa, para no impedir corregir otra cosa (D30).
+   */
+  const faltanRemoto = esRemota
+    ? [
+        !datos.pais && 'país',
+        !(datos.ciudad ?? '').trim() && 'ciudad o municipio',
+        !(datos.direccion ?? '').trim() && 'dirección',
+      ].filter((x): x is string => Boolean(x))
+    : [];
+  const entraARemoto = esRemota && (!empleado || empleado.sede_id !== datos.sede_id);
+  const bloqueaRemoto = entraARemoto && faltanRemoto.length > 0;
+  const avisarDireccion = esRemota && !entraARemoto && faltanRemoto.length > 0;
+
+  /**
+   * Las sedes que se pueden elegir: las activas, más la actual aunque esté
+   * inactiva, para que una ficha vieja no aparezca con el desplegable en
+   * blanco y se cambie sin querer al guardar.
+   */
+  const sedesElegibles = sedes.filter((s) => s.activa || s.id === empleado?.sede_id);
 
   const guardar = async () => {
     if (!datos.nombre.trim()) return;
@@ -622,6 +654,10 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
         sede_id: datos.sede_id || null,
         telefono: datos.telefono?.trim() || null,
         direccion: datos.direccion?.trim() || null,
+        // Fuera de Remoto no aplican: el servidor también los limpia.
+        pais: esRemota ? datos.pais || null : null,
+        departamento: esRemota ? datos.departamento?.trim() || null : null,
+        ciudad: esRemota ? datos.ciudad?.trim() || null : null,
       };
       if (empleado) await api.actualizarEmpleado(empleado.id, limpio);
       else await api.crearEmpleado(limpio);
@@ -685,9 +721,10 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
             className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
           >
             <option value="">Sin sede</option>
-            {sedes.map((s) => (
+            {sedesElegibles.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nombre}
+                {s.activa ? '' : ' (ya no activa)'}
               </option>
             ))}
           </select>
@@ -706,15 +743,49 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
             ))}
           </select>
         </label>
-        {campo('Dirección', 'direccion', { ancho: true })}
+        {esRemota && (
+          <>
+            {/* 0022. Dónde está el remoto. Solo el país es lista: los
+                municipios se escriben a mano. */}
+            <label className="text-xs text-ink-muted space-y-1">
+              <span>País *</span>
+              <select
+                value={datos.pais ?? ''}
+                onChange={(e) => poner('pais', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+              >
+                <option value="">Elegir país…</option>
+                {PAISES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {campo(
+              datos.pais === 'Estados Unidos' ? 'Estado' : 'Departamento',
+              'departamento',
+            )}
+            {campo('Ciudad o municipio *', 'ciudad', { ancho: true })}
+          </>
+        )}
+        {campo(esRemota ? 'Dirección *' : 'Dirección', 'direccion', { ancho: true })}
       </div>
+
+      {bloqueaRemoto && (
+        <p className="text-xs text-ink bg-danger/10 border border-danger/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-danger" />
+          Para pasar a «{sedeElegida.nombre}» falta: {faltanRemoto.join(', ')}. Sin eso no hay a
+          dónde mandarle el equipo.
+        </p>
+      )}
 
       {avisarDireccion && (
         <p className="text-xs text-ink bg-warn/10 border border-warn/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
           <AlertTriangle className="w-4 h-4 shrink-0 text-warn" />
-          «{sedeElegida.nombre}» no es una oficina: sin dirección no hay a dónde mandarle el
-          equipo. Se puede guardar igual —el dato quizá no lo sepa quien está editando— pero
-          conviene completarlo antes de la primera entrega.
+          «{sedeElegida.nombre}» no es una oficina y falta: {faltanRemoto.join(', ')}. Se puede
+          guardar igual —el dato quizá no lo sepa quien está editando— pero conviene completarlo
+          antes de la primera entrega.
         </p>
       )}
 
@@ -730,7 +801,7 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
       <div className="flex items-center gap-2">
         <button
           onClick={() => void guardar()}
-          disabled={enviando || !datos.nombre.trim()}
+          disabled={enviando || !datos.nombre.trim() || bloqueaRemoto}
           className="px-3 py-2 text-sm bg-brand text-white rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
         >
           {enviando && <Loader2 className="w-4 h-4 animate-spin" />}

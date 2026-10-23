@@ -159,6 +159,30 @@ BEGIN
     INSERT INTO resultado VALUES ('CHECK: Emerald Fire prestado a sí misma', 'rechazado', 'rechazado');
   END;
 
+  -- 3f. 0022: el país de un remoto es lista cerrada; departamento y ciudad no.
+  BEGIN
+    INSERT INTO empleados (nombre, pais, departamento, ciudad)
+      VALUES ('verif remoto EE. UU.', 'Estados Unidos', 'Florida', 'Miami');
+    INSERT INTO resultado VALUES ('0022: remoto en Estados Unidos', 'aceptado', 'aceptado');
+  EXCEPTION WHEN invalid_text_representation OR undefined_column THEN
+    INSERT INTO resultado VALUES ('0022: remoto en Estados Unidos', 'aceptado', 'RECHAZADO');
+  END;
+
+  BEGIN
+    INSERT INTO empleados (nombre, pais) VALUES ('verif remoto México', 'México');
+    INSERT INTO resultado VALUES ('0022: país fuera de la lista', 'rechazado', 'ACEPTADO');
+  EXCEPTION WHEN invalid_text_representation THEN
+    INSERT INTO resultado VALUES ('0022: país fuera de la lista', 'rechazado', 'rechazado');
+  END;
+
+  -- Y sin país también entra: las fichas viejas no se bloquean (D30).
+  BEGIN
+    INSERT INTO empleados (nombre) VALUES ('verif sin ubicación');
+    INSERT INTO resultado VALUES ('0022: ficha sin ubicación (D30)', 'aceptado', 'aceptado');
+  EXCEPTION WHEN OTHERS THEN
+    INSERT INTO resultado VALUES ('0022: ficha sin ubicación (D30)', 'aceptado', 'RECHAZADO');
+  END;
+
   -- 4. serial NULL repetido: varios vacíos conviven
   INSERT INTO equipos (categoria, estado, serial) VALUES ('Monitor', 'Disponible', NULL);
   INSERT INTO equipos (categoria, estado, serial) VALUES ('Monitor', 'Disponible', NULL);

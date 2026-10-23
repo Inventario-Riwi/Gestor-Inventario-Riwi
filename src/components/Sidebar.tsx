@@ -50,7 +50,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   useEffect(() => {
     api.sedes().then(
-      (r) => setSedes(r.sedes),
+      // 0022: el resumen lista las sedes vigentes, no las retiradas.
+      (r) => setSedes(r.sedes.filter((s) => s.activa)),
       () => setSedes([]),
     );
   }, []);

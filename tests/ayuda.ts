@@ -15,7 +15,7 @@ import { eq, like, sql } from 'drizzle-orm';
 
 import { cifrar } from '../db/cifrado.js';
 import { db, pool } from '../db/cliente.js';
-import { empleados, equipos, usuariosApp } from '../db/esquema.js';
+import { empleados, equipos, sedes, usuariosApp } from '../db/esquema.js';
 import type { EmpresaQueEmite } from '../db/acta-formato.js';
 import { siguienteConsecutivo } from '../db/repositorios/actas.js';
 import { crearApp } from '../server/app.js';
@@ -630,6 +630,31 @@ export async function motivosDe(equipoId: string): Promise<{
 
 export async function borrarEmpleados(ids: string[]): Promise<void> {
   for (const id of ids) await db.delete(empleados).where(eq(empleados.id, id));
+}
+
+/** Una sede por su nombre. Falla si no está: el test no debe pasar de vacío. */
+export async function sedePorNombre(nombre: string): Promise<string> {
+  const [fila] = await db.select({ id: sedes.id }).from(sedes).where(eq(sedes.nombre, nombre));
+  if (!fila) throw new Error(`No existe la sede ${nombre}. Correr: npm run test:preparar`);
+  return fila.id;
+}
+
+/** Una sede propia del test, para no depender de cuáles retiró una migración. */
+export async function crearSede(nombre: string, ciudad: string | null, activa: boolean) {
+  const [fila] = await db
+    .insert(sedes)
+    .values({ nombre, ciudad, activa })
+    .returning({ id: sedes.id });
+  return fila.id;
+}
+
+export async function borrarSedes(ids: string[]): Promise<void> {
+  for (const id of ids) await db.delete(sedes).where(eq(sedes.id, id));
+}
+
+/** Pone a alguien en una sede por SQL, saltándose la API: es una ficha vieja. */
+export async function ponerSede(empleadoId: string, sedeId: string): Promise<void> {
+  await db.update(empleados).set({ sede_id: sedeId }).where(eq(empleados.id, empleadoId));
 }
 
 /** El estado actual de un equipo, leído de la base y no de la respuesta. */

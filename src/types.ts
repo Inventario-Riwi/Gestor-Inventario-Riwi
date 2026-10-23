@@ -21,6 +21,7 @@ import type {
   equipos,
   mantenimientos,
   movimientos,
+  pais,
   prestatario,
   sedes,
 } from '../db/esquema';
@@ -524,6 +525,10 @@ export type Prestatario = 'RIWI' | 'BBL Labs' | 'Emerald Fire' | 'ISF';
 export const PRESTATARIOS: Prestatario[] = ['RIWI', 'BBL Labs', 'Emerald Fire', 'ISF'];
 export const EMPRESAS: Empresa[] = ['RIWI', 'BBL Labs', 'Emerald Fire', 'Sin clasificar'];
 
+/** 0022. Dónde puede vivir un colaborador remoto. */
+export type Pais = 'Colombia' | 'Estados Unidos';
+export const PAISES: Pais[] = ['Colombia', 'Estados Unidos'];
+
 /** Los estados de un parte con el equipo todavía en el taller. */
 export const ESTADOS_PARTE_ABIERTO = ['Pendiente', 'En taller', 'Completado'] as const;
 export type EstadoParteAbierto = (typeof ESTADOS_PARTE_ABIERTO)[number];
@@ -538,6 +543,9 @@ export interface DatosEmpleado {
   sede_id?: string | null;
   telefono?: string | null;
   direccion?: string | null;
+  pais?: Pais | null;
+  departamento?: string | null;
+  ciudad?: string | null;
   empresa?: Empresa;
 }
 
@@ -626,6 +634,8 @@ type _c7 = Comprobar<Igual<Prestatario, (typeof prestatario.enumValues)[number]>
 type _c8 = Comprobar<Igual<(typeof EMPRESAS)[number], Empresa>>;
 type _c9 = Comprobar<Igual<(typeof PRESTATARIOS)[number], Prestatario>>;
 type _c10 = Comprobar<Igual<(typeof EMPRESAS_QUE_EMITEN)[number], EmpresaQueEmite>>;
+type _c11 = Comprobar<Igual<Pais, (typeof pais.enumValues)[number]>>;
+type _c12 = Comprobar<Igual<(typeof PAISES)[number], Pais>>;
 
 // ---------------------------------------------------------------------------
 // Respuestas de la API

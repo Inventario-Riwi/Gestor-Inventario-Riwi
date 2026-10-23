@@ -598,6 +598,23 @@ INSERT INTO hallazgo
 SELECT 'H', 'contador de una empresa sin formato aprobado', count(*)
 FROM actas_consecutivo c WHERE c.empresa = 'Emerald Fire';
 
+-- 0022: nadie activo vive en una sede retirada. La migración pasó a Remoto a
+-- quienes estaban en Bogotá y Boyacá, y la API no deja entrar en una inactiva;
+-- si aparece alguien, es que se desactivó una sede con gente dentro.
+-- Los EQUIPOS sí pueden seguir ahí hasta que se trasladen: no se cuentan.
+INSERT INTO hallazgo
+SELECT 'S', 'empleados activos en una sede inactiva', count(*)
+FROM empleados e JOIN sedes s ON s.id = e.sede_id
+WHERE e.activo AND NOT s.activa;
+
+-- Y la ubicación remota solo tiene sentido en Remoto: una ciudad puesta en
+-- alguien de una oficina contradice a la de la oficina.
+INSERT INTO hallazgo
+SELECT 'S', 'ubicación remota en alguien que no es remoto', count(*)
+FROM empleados e JOIN sedes s ON s.id = e.sede_id
+WHERE s.ciudad IS NOT NULL
+  AND (e.pais IS NOT NULL OR e.departamento IS NOT NULL OR e.ciudad IS NOT NULL);
+
 -- Y el prefijo tiene que ser el de SU empresa. Sin esto, un acta de BBL podría
 -- llevar número de la serie de RIWI: dos documentos legales distintos con el
 -- mismo número, que es justo lo que el prefijo vino a evitar.

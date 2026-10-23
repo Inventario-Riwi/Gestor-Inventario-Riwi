@@ -287,7 +287,8 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
               >
                 <option value="">Sin sede</option>
-                {sedes.map((s) => (
+                {/* 0022: un equipo nuevo no entra a una sede retirada. */}
+                {sedes.filter((s) => s.activa).map((s) => (
                   <option key={s.id} value={s.id}>{s.nombre}</option>
                 ))}
               </select>

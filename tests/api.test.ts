@@ -17,13 +17,17 @@ import {
   BIOS_EN_CLARO,
   borrarEmpleados,
   borrarEquipos,
+  borrarSedes,
   buscarFugas,
   Cliente,
   comprobarBaseDeTest,
   contarAuditoria,
   crearEmpleado,
   crearEquipoConSecretos,
+  crearSede,
   LICENCIA_EN_CLARO,
+  ponerSede,
+  sedePorNombre,
   PROHIBIDO_EN_RESPUESTAS,
   type Servidor,
   type UsuarioDePrueba,
@@ -619,5 +623,137 @@ describe('empleados: desactivar con equipos a su nombre', () => {
   it('un PATCH que no toca activo no exige nada', async () => {
     const r = await c.patch(`/api/empleados/${conEquipo}`, { cargo: 'Analista' });
     assert.equal(r.estado, 200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0022: tres oficinas y Remoto. De un remoto se sabe dónde está.
+// ---------------------------------------------------------------------------
+
+describe('empleados: sedes y ubicación remota (0022)', () => {
+  const suite = ambito('remotos');
+  let admin: UsuarioDePrueba;
+  let remoto: string;
+  let medellin: string;
+  let retirada: string;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  type Ficha = {
+    id: string;
+    sede_id: string | null;
+    pais: string | null;
+    departamento: string | null;
+    ciudad: string | null;
+  };
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    remoto = await sedePorNombre('Remoto');
+    medellin = await sedePorNombre('Medellín');
+    // Propia del test: no depende de qué sedes retiró la 0022 en esta base.
+    retirada = await crearSede(`${suite.prefijo}Retirada`, `${suite.prefijo}Ciudad`, false);
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEmpleados(creados);
+    await borrarSedes([retirada]);
+    await suite.limpiar();
+  });
+
+  const alta = async (cuerpo: Record<string, unknown>) => {
+    const r = await c.post('/api/empleados', { nombre: `${suite.prefijo}${creados.length}`, ...cuerpo });
+    if (r.estado === 201) creados.push((r.cuerpo as { empleado: Ficha }).empleado.id);
+    return r;
+  };
+
+  it('alta en Remoto sin ciudad ni dirección: 400 y dice qué falta', async () => {
+    const antes = creados.length;
+    const r = await alta({ sede_id: remoto, pais: 'Colombia' });
+    assert.equal(r.estado, 400, JSON.stringify(r.cuerpo));
+    const { faltan } = r.cuerpo as { faltan: string[] };
+    assert.deepEqual(faltan, ['ciudad o municipio', 'dirección']);
+    assert.equal(creados.length, antes, 'creó la ficha igual');
+  });
+
+  it('alta en Remoto completa, también en Estados Unidos', async () => {
+    const r = await alta({
+      sede_id: remoto,
+      pais: 'Estados Unidos',
+      departamento: 'Florida',
+      ciudad: 'Miami',
+      direccion: '100 Biscayne Blvd',
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const e = (r.cuerpo as { empleado: Ficha }).empleado;
+    assert.equal(e.pais, 'Estados Unidos');
+    assert.equal(e.departamento, 'Florida');
+    assert.equal(e.ciudad, 'Miami');
+  });
+
+  it('un país fuera de la lista: 400', async () => {
+    const r = await alta({ sede_id: remoto, pais: 'México', ciudad: 'CDMX', direccion: 'x' });
+    assert.equal(r.estado, 400, JSON.stringify(r.cuerpo));
+  });
+
+  it('pasar a Remoto exige la ubicación; con ella, entra', async () => {
+    const r0 = await alta({ sede_id: medellin });
+    assert.equal(r0.estado, 201, JSON.stringify(r0.cuerpo));
+    const id = (r0.cuerpo as { empleado: Ficha }).empleado.id;
+
+    const sin = await c.patch(`/api/empleados/${id}`, { sede_id: remoto });
+    assert.equal(sin.estado, 400, 'pasó a Remoto sin saber dónde está');
+
+    const con = await c.patch(`/api/empleados/${id}`, {
+      sede_id: remoto,
+      pais: 'Colombia',
+      departamento: 'Antioquia',
+      ciudad: 'Rionegro',
+      direccion: 'Calle 1 # 2-3',
+    });
+    assert.equal(con.estado, 200, JSON.stringify(con.cuerpo));
+    assert.equal((con.cuerpo as { empleado: Ficha }).empleado.ciudad, 'Rionegro');
+  });
+
+  it('volver a una oficina limpia la ubicación remota', async () => {
+    const r0 = await alta({
+      sede_id: remoto,
+      pais: 'Colombia',
+      ciudad: 'Bogotá',
+      direccion: 'Cra 7 # 1-1',
+    });
+    const id = (r0.cuerpo as { empleado: Ficha }).empleado.id;
+    const r = await c.patch(`/api/empleados/${id}`, { sede_id: medellin });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    const e = (r.cuerpo as { empleado: Ficha }).empleado;
+    assert.equal(e.pais, null);
+    assert.equal(e.departamento, null);
+    assert.equal(e.ciudad, null, 'Bogotá en alguien de Medellín contradice a la sede');
+  });
+
+  it('una ficha remota vieja sin ubicación se sigue pudiendo editar (D30)', async () => {
+    const id = await crearEmpleado(`${suite.prefijo}viejo`);
+    creados.push(id);
+    await ponerSede(id, remoto);
+    const r = await c.patch(`/api/empleados/${id}`, { cargo: 'Analista' });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+  });
+
+  it('a una sede inactiva no se entra; quien ya está, se puede editar', async () => {
+    const r0 = await alta({ sede_id: medellin });
+    const id = (r0.cuerpo as { empleado: Ficha }).empleado.id;
+    const entrar = await c.patch(`/api/empleados/${id}`, { sede_id: retirada });
+    assert.equal(entrar.estado, 409, JSON.stringify(entrar.cuerpo));
+
+    const altaAhi = await alta({ sede_id: retirada });
+    assert.equal(altaAhi.estado, 409, 'dio de alta en una sede retirada');
+
+    const viejo = await crearEmpleado(`${suite.prefijo}en-retirada`);
+    creados.push(viejo);
+    await ponerSede(viejo, retirada);
+    const editar = await c.patch(`/api/empleados/${viejo}`, { cargo: 'Analista' });
+    assert.equal(editar.estado, 200, 'bloqueó editar a quien ya estaba ahí');
   });
 });

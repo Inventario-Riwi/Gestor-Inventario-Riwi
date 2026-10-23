@@ -370,7 +370,8 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
           >
             <option value="">— elegir sede —</option>
             {sedes
-              .filter((s) => s.id !== equipo.sede_id)
+              // 0022: a una sede inactiva no se traslada; desde una, sí.
+              .filter((s) => s.id !== equipo.sede_id && s.activa)
               .map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.nombre}

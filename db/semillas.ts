@@ -13,19 +13,18 @@ import { db, pool } from './cliente.js';
 import { motivosRevision, sedes, usuariosApp } from './esquema.js';
 import { MOTIVOS, MOTIVOS_SIN_RESPONSABLE, type CodigoMotivo } from './motivos.js';
 
-/** Semilla del §2. `Remoto` no es un lugar, por eso no lleva ciudad. */
+/**
+ * Semilla del §2. `Remoto` no es un lugar, por eso no lleva ciudad.
+ *
+ * 0022: solo las tres oficinas y Remoto. Bogotá y Boyacá dejaron de ser sede —
+ * quien está allí es Remoto con su ciudad— y ya no se siembran. En una base
+ * que las tenga, la 0022 las desactiva; aquí no se tocan, porque la semilla
+ * solo inserta lo que falta.
+ */
 const SEDES = [
   { nombre: 'Medellín', ciudad: 'Medellín' },
   { nombre: 'Barranquilla', ciudad: 'Barranquilla' },
   { nombre: 'Cartagena', ciudad: 'Cartagena' },
-  { nombre: 'Bogotá', ciudad: 'Bogotá' },
-  /**
-   * Sede nueva de la 5e: un equipo de RIWI está en Boyacá y es una sede real,
-   * no un valor sucio. `San Rafael` NO entra aquí — nadie ha dicho todavía si
-   * es una sede o un sitio dentro de otra, y las filas que la traen entran con
-   * `sede_id = NULL` y su motivo (D7 c).
-   */
-  { nombre: 'Boyacá', ciudad: 'Boyacá' },
   { nombre: 'Remoto', ciudad: null },
 ];
 

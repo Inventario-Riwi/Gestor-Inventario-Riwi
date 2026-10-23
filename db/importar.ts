@@ -1645,7 +1645,13 @@ async function main() {
     await tx.execute(sql`SET LOCAL statement_timeout = 0`);
     await tx.execute(sql`SET LOCAL lock_timeout = 0`);
 
-    const sedesBd = await tx.select({ id: sedes.id, nombre: sedes.nombre }).from(sedes);
+    // Solo las activas (0022). «Bogotá» o «Boyacá» ya no son sede: la fila
+    // conserva el texto en `ubicacion_detalle` y va a la bandeja con
+    // UBICACION_FUERA_DE_SEDES, para que una persona decida — no se adivina.
+    const sedesBd = await tx
+      .select({ id: sedes.id, nombre: sedes.nombre })
+      .from(sedes)
+      .where(eq(sedes.activa, true));
     const sedePorNombre = new Map(sedesBd.map((s) => [norm(s.nombre), s.id]));
 
     const [sistema] = await tx

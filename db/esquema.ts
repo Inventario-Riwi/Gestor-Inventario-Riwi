@@ -191,6 +191,9 @@ export const estadoMantenimiento = pgEnum('estado_mantenimiento', [
 /** D28. `Sin clasificar` es de partida, no un valor de relleno. */
 export const empresaEmpleado = pgEnum('empresa', ['RIWI', 'BBL Labs', 'Sin clasificar', 'Emerald Fire']);
 
+/** 0022. Dónde vive un colaborador remoto. Un país nuevo es una migración. */
+export const pais = pgEnum('pais', ['Colombia', 'Estados Unidos']);
+
 /** Los estados de un parte con el equipo todavía en el taller. */
 export const ESTADOS_PARTE_ABIERTO = ['Pendiente', 'En taller', 'Completado'] as const;
 
@@ -256,6 +259,14 @@ export const empleados = pgTable(
      * interfaz, que es donde alguien puede hacer algo al respecto.
      */
     direccion: text('direccion'),
+    /**
+     * 0022. Dónde está un remoto. Texto libre salvo el país: los municipios los
+     * escribe quien da el alta. Mismo criterio que `direccion`: la API los
+     * exige al pasar a Remoto, la base no (D30).
+     */
+    pais: pais('pais'),
+    departamento: text('departamento'),
+    ciudad: text('ciudad'),
     activo: boolean('activo').notNull().default(true),
     /**
      * De qué empresa es (D28). `Sin clasificar` es el valor de partida de los

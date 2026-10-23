@@ -9,7 +9,8 @@ import type { Express } from 'express';
 import { z } from 'zod';
 
 import * as repoEmpleados from '../../db/repositorios/empleados.js';
-import { empresaEmpleado, estadoEmpleado } from '../../db/esquema.js';
+import * as repoSedes from '../../db/repositorios/sedes.js';
+import { empresaEmpleado, estadoEmpleado, pais } from '../../db/esquema.js';
 import { guardian } from '../autenticar.js';
 import { asincrono, ErrorHttp, noEncontrado } from '../errores.js';
 import { ruta } from '../permisos.js';
@@ -28,9 +29,75 @@ const campos = z.object({
   estado: z.enum(estadoEmpleado.enumValues).optional(),
   telefono: z.string().trim().max(60).nullable().optional(),
   direccion: z.string().trim().max(300).nullable().optional(),
+  pais: z.enum(pais.enumValues).nullable().optional(),
+  departamento: z.string().trim().max(120).nullable().optional(),
+  ciudad: z.string().trim().max(120).nullable().optional(),
   empresa: z.enum(empresaEmpleado.enumValues).optional(),
   activo: z.boolean().optional(),
 });
+
+type DatosEmpleado = z.infer<typeof campos>;
+
+const vacio = (v: string | null | undefined) => !v || v.trim() === '';
+
+/**
+ * Las reglas de sede del 0022, para un alta o un cambio.
+ *
+ * - **No se entra a una sede inactiva.** Bogotá y Boyacá siguen existiendo por
+ *   el historial, pero ya no se ofrecen; quien llegue por otro camino, 409.
+ * - **Al entrar a Remoto hacen falta país, ciudad y dirección.** Solo al
+ *   ENTRAR —un alta, o un cambio de sede—, no en cada edición: una ficha vieja
+ *   sin dirección tiene que poder corregirse en otra cosa (D30).
+ * - **Fuera de Remoto, la ubicación remota se limpia.** La ciudad de una
+ *   oficina es la de la oficina; dejar «Bogotá» en alguien de Medellín sería
+ *   un dato que contradice a otro.
+ *
+ * `actual` es la ficha antes del cambio, o null en un alta. Devuelve los datos
+ * que hay que guardar.
+ */
+async function aplicarReglasDeSede<T extends Partial<DatosEmpleado>>(
+  datos: T,
+  actual: { sede_id: string | null } & Pick<DatosEmpleado, 'pais' | 'ciudad' | 'direccion'> | null,
+): Promise<T> {
+  const cambiaSede = datos.sede_id !== undefined && datos.sede_id !== (actual?.sede_id ?? null);
+  const sedeFinal = datos.sede_id !== undefined ? datos.sede_id : (actual?.sede_id ?? null);
+  if (!sedeFinal) return datos;
+
+  const sede = await repoSedes.porId(sedeFinal);
+  if (!sede) throw new ErrorHttp(400, 'La sede no existe.');
+  if (cambiaSede && !sede.activa) {
+    throw new ErrorHttp(409, `La sede ${sede.nombre} ya no está activa. Elige otra.`);
+  }
+
+  const esRemota = sede.ciudad === null;
+  if (!esRemota) {
+    // Solo si algo de esto venía puesto o la persona cambia de sede: un PATCH
+    // de otra cosa no tiene por qué escribir tres columnas.
+    if (cambiaSede || datos.pais !== undefined || datos.ciudad !== undefined || datos.departamento !== undefined) {
+      return { ...datos, pais: null, departamento: null, ciudad: null };
+    }
+    return datos;
+  }
+
+  if (actual === null || cambiaSede) {
+    const final = {
+      pais: datos.pais !== undefined ? datos.pais : actual?.pais,
+      ciudad: datos.ciudad !== undefined ? datos.ciudad : actual?.ciudad,
+      direccion: datos.direccion !== undefined ? datos.direccion : actual?.direccion,
+    };
+    const faltan = [
+      !final.pais && 'país',
+      vacio(final.ciudad) && 'ciudad o municipio',
+      vacio(final.direccion) && 'dirección',
+    ].filter(Boolean);
+    if (faltan.length > 0) {
+      throw new ErrorHttp(400, `Para la sede ${sede.nombre} falta: ${faltan.join(', ')}.`, {
+        faltan,
+      });
+    }
+  }
+  return datos;
+}
 
 const esquemaCrear = campos;
 const esquemaActualizar = campos.partial();
@@ -111,7 +178,7 @@ export function registrarRutasEmpleados(app: Express): void {
     'autenticado',
     guardian,
     asincrono(async (req, res) => {
-      const datos = validar(esquemaCrear, req.body);
+      const datos = await aplicarReglasDeSede(validar(esquemaCrear, req.body), null);
       res.status(201).json({ empleado: await repoEmpleados.crear(datos) });
     }),
   );
@@ -152,7 +219,10 @@ export function registrarRutasEmpleados(app: Express): void {
         }
       }
 
-      const actualizado = await repoEmpleados.actualizar(id, datos);
+      const actualizado = await repoEmpleados.actualizar(
+        id,
+        await aplicarReglasDeSede(datos, empleado),
+      );
       if (!actualizado) throw noEncontrado('Empleado');
       res.json({ empleado: actualizado });
     }),

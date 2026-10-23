@@ -125,12 +125,19 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sedes.map((sede) => (
+            {/* 0022: una sede retirada solo se enseña mientras le queden
+                equipos, que es cuando todavía hay algo que trasladar. */}
+            {sedes.filter((s) => s.activa || s.equipos_total > 0).map((sede) => (
               <article key={sede.id} className="bg-surface border border-line rounded-xl p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="font-semibold text-ink">{sede.nombre}</h2>
                     {sede.ciudad && <p className="text-xs text-ink-muted">{sede.ciudad}</p>}
+                    {!sede.activa && (
+                      <p className="text-xs text-ink bg-warn/10 border border-warn/40 rounded px-2 py-0.5 mt-1">
+                        Ya no es sede: traslada estos equipos a una activa.
+                      </p>
+                    )}
                   </div>
                   <span className="text-2xl font-bold text-brand tabular-nums">
                     {sede.equipos_total}
