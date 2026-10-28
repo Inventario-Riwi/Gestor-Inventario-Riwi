@@ -54,7 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Search bar */}
+          {/* El buscador. Comparte el texto con Inventario, que es quien
+              busca de verdad: en Inventario filtra mientras se escribe, y desde
+              cualquier otra pantalla Enter lleva allí con la búsqueda puesta.
+              Antes, fuera de Inventario, escribir y pulsar Enter no hacía nada. */}
           <div className="flex-1 max-w-md hidden sm:block">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -63,8 +66,20 @@ export const Header: React.FC<HeaderProps> = ({
                 placeholder="Buscar por etiqueta, serial, marca, modelo o persona…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchTerm.trim() && activeTab !== 'inventory') {
+                    setActiveTab('inventory');
+                  } else if (e.key === 'Escape') {
+                    setSearchTerm('');
+                  }
+                }}
                 className="w-full bg-surface-alt border border-line rounded-lg pl-9 pr-4 py-1.5 text-xs text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-brand focus:bg-surface transition-all"
               />
+              {searchTerm.trim() && activeTab !== 'inventory' && (
+                <p className="absolute left-0 top-full mt-1 text-[11px] text-ink-muted bg-surface border border-line rounded-md px-2 py-0.5 shadow-sm">
+                  Enter para buscar en Inventario · Esc para borrar
+                </p>
+              )}
             </div>
           </div>
 
