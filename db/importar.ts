@@ -82,11 +82,31 @@ interface Fuente {
  * entre sí. Al revés habría que decidir con qué versión de la fila de RIWI se
  * compara la de BBL, que es justo lo que la primera regla responde.
  */
-const FUENTES: Fuente[] = HOJAS.map((mapa) => ({
-  empresa: mapa.empresa,
-  ruta: RUTAS[mapa.empresa],
-  mapa,
-}));
+/**
+ * Carga de PRUEBA de una sola hoja: `npm run import -- "INV - CE"`.
+ *
+ * Solo para probar en el portátil antes de la carga de verdad. Se lee nada
+ * más el libro de esa hoja, y todas las comprobaciones siguen —conteo de
+ * filas de la hoja, hojas desconocidas en ese libro, reconciliación—, pero
+ * contra esa hoja sola. Lo que cruza los dos libros (duplicados entre RIWI y
+ * BBL) no se ve: una carga parcial NO sirve para llevarla a la VM.
+ */
+const SOLO_HOJA = process.argv[2]?.trim() || null;
+
+const FUENTES: Fuente[] = HOJAS.filter((mapa) => !SOLO_HOJA || mapa.nombre === SOLO_HOJA).map(
+  (mapa) => ({
+    empresa: mapa.empresa,
+    ruta: RUTAS[mapa.empresa],
+    mapa,
+  }),
+);
+
+if (SOLO_HOJA && FUENTES.length === 0) {
+  throw new Error(
+    `No hay ninguna hoja llamada "${SOLO_HOJA}" en el catálogo. Las que hay:\n` +
+      HOJAS.map((h) => `  ${h.nombre}  (${RUTAS[h.empresa]})`).join('\n'),
+  );
+}
 
 /**
  * Lo que la reconciliación exige antes del COMMIT.
@@ -94,7 +114,7 @@ const FUENTES: Fuente[] = HOJAS.map((mapa) => ({
  * Sale del catálogo y no de dos constantes escritas a mano: con quince hojas,
  * un número copiado a mano se queda viejo en cuanto una de ellas crezca.
  */
-const ESPERADO_FILAS = HOJAS.reduce((a, h) => a + h.filasEsperadas, 0);
+const ESPERADO_FILAS = FUENTES.reduce((a, f) => a + f.mapa.filasEsperadas, 0);
 
 // ---------------------------------------------------------------------------
 // Normalización de texto
@@ -1414,6 +1434,12 @@ function escribirReporte(candidatas: Candidata[]) {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  if (SOLO_HOJA) {
+    console.log(
+      `\n*** CARGA DE PRUEBA: solo la hoja "${SOLO_HOJA}" de ${FUENTES[0].ruta}. ` +
+        `No llevar esta base a la VM. ***\n`,
+    );
+  }
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(equipos);
   if (n > 0) {
     throw new Error(
