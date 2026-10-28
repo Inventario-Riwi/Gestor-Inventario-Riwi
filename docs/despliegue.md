@@ -443,6 +443,24 @@ aplica las migraciones con la imagen nueva y arranca, y comprueba que la
 aplicación responde. Sirve igual para la primera vez. Si un paso falla se
 detiene, y la versión que estaba corriendo sigue en pie.
 
+### Respaldo diario: `programar-respaldo.sh`
+
+Una vez, con la aplicación ya corriendo:
+
+```bash
+sudo timedatectl set-timezone America/Bogota   # que «03:15» sea hora de Colombia
+bash programar-respaldo.sh
+```
+
+Deja `db/respaldar.sh` en `/etc/cron.d/riwistock-respaldo` a las 03:15 (como
+root), la rotación del registro en `/etc/logrotate.d/`, y hace un respaldo en
+ese momento para comprobar que funciona. `--simular` enseña lo que escribiría.
+
+La copia **fuera de la VM** es aparte: se pide a quien administra el Proxmox que
+incluya la VM en sus respaldos programados, después de las 04:00 y hacia otro
+almacenamiento. Esa copia lleva la base, los respaldos diarios y el `.env`; la
+`ENCRYPTION_KEY` está además en el gestor de contraseñas.
+
 **Cuando la base ya tiene datos de uso, no se reemplaza con un volcado del
 portátil**: se perdería lo registrado. Los cambios de esquema van siempre por
 migración nueva, probada antes en local.
