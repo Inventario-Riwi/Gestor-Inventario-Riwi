@@ -24,7 +24,17 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-COMPOSE="docker compose -f docker-compose.produccion.yml"
+# Docker con `sudo` solo si hace falta. En la VM el usuario NO está en el grupo
+# `docker` a propósito (ese grupo equivale a root sin contraseña), así que hay
+# que pedirlo. Y solo para Docker: correr el script entero con sudo haría el
+# `git pull` como root, que no tiene la llave de GitHub del usuario.
+SUDO=""
+if [ "$(id -u)" -ne 0 ] && ! docker info >/dev/null 2>&1; then
+  SUDO="sudo"
+  sudo -v   # pide la contraseña ahora, no a mitad del despliegue
+fi
+COMPOSE="$SUDO docker compose -f docker-compose.produccion.yml"
+export COMPOSE   # db/respaldar.sh lo lee del entorno
 
 paso() { printf '\n== %s\n' "$1"; }
 

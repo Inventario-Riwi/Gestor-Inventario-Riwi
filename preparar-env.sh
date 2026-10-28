@@ -60,7 +60,7 @@ echo "Preparando el .env de RiwiStock."
 echo
 
 sitio="$(preguntar "IP de esta VM (p. ej. 10.0.10.5): " "^${IP}$")"
-redes="$(preguntar "Redes que pueden entrar, separadas por un espacio (Medellín y Barranquilla, p. ej. 10.0.12.0/24 10.20.0.0/24): " "^${CIDR}( ${CIDR})*$")"
+redes="$(preguntar "Rangos IP que pueden entrar, en números y separados por un espacio: primero la VLAN de usuarios de Medellín, luego la de Barranquilla (p. ej. 10.0.12.0/24 10.20.0.0/24): " "^${CIDR}( ${CIDR})*$")"
 razon="$(preguntar "Razón social para las actas (Enter para dejarla vacía): " "^.*$")"
 nit="$(preguntar "NIT para las actas (Enter para dejarlo vacío): " "^[0-9.\-]*$")"
 
