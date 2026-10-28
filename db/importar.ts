@@ -116,6 +116,9 @@ if (SOLO_HOJA && FUENTES.length === 0) {
  */
 const ESPERADO_FILAS = FUENTES.reduce((a, f) => a + f.mapa.filasEsperadas, 0);
 
+/** Solo en carga de prueba: cuánto difiere el fichero del catálogo. Siempre 0 en la de verdad. */
+let ajusteFilasPrueba = 0;
+
 // ---------------------------------------------------------------------------
 // Normalización de texto
 // ---------------------------------------------------------------------------
@@ -1502,12 +1505,15 @@ async function main() {
     ]);
     const nuevas = wb.worksheets.map((h) => h.name).filter((n) => !conocidas.has(n));
     if (nuevas.length > 0) {
-      throw new Error(
+      const mensaje =
         `${RUTAS[empresa as keyof typeof RUTAS]}: hojas que el catálogo no conoce: ` +
-          `${nuevas.map((n) => JSON.stringify(n)).join(', ')}.\n` +
-          `  Añadirlas a HOJAS o a HOJAS_IGNORADAS en db/hojas.ts antes de importar. ` +
-          `Cargar sin mirarlas dejaría inventario fuera sin que nadie se entere.`,
-      );
+        `${nuevas.map((n) => JSON.stringify(n)).join(', ')}.\n` +
+        `  Añadirlas a HOJAS o a HOJAS_IGNORADAS en db/hojas.ts antes de importar. ` +
+        `Cargar sin mirarlas dejaría inventario fuera sin que nadie se entere.`;
+      // En la carga de prueba de una hoja, aviso: no se carga el libro entero.
+      // En la de verdad sigue siendo un alto.
+      if (!SOLO_HOJA) throw new Error(mensaje);
+      console.warn(`AVISO (solo en prueba): ${mensaje}\n`);
     }
   }
 
@@ -1518,10 +1524,14 @@ async function main() {
     // El conteo del catálogo contra el fichero. Si no cuadra, el Excel cambió y
     // hay que mirarlo antes de cargar lo que venga.
     if (filas.length !== fuente.mapa.filasEsperadas) {
-      throw new Error(
+      const mensaje =
         `${fuente.mapa.nombre}: el fichero trae ${filas.length} filas y el catálogo espera ` +
-          `${fuente.mapa.filasEsperadas}. El Excel cambió: revisar db/hojas.ts.`,
-      );
+        `${fuente.mapa.filasEsperadas}. El Excel cambió: revisar db/hojas.ts.`;
+      if (!SOLO_HOJA) throw new Error(mensaje);
+      // En prueba se sigue con lo que trae el fichero, y la reconciliación del
+      // final cuadra contra eso en vez de contra el catálogo.
+      console.warn(`AVISO (solo en prueba): ${mensaje}\n`);
+      ajusteFilasPrueba += filas.length - fuente.mapa.filasEsperadas;
     }
 
     // Las licencias van por su propio camino (D43): no son equipos.
@@ -1991,9 +2001,9 @@ async function main() {
      */
     const derivadas = candidatas.filter((c) => c.hoja === 'INV - CE' && !c.esEquipo).length;
     const leidasDelExcel = candidatas.length - derivadas + licenciasLeidas.length;
-    if (leidasDelExcel !== ESPERADO_FILAS) {
+    if (leidasDelExcel !== ESPERADO_FILAS + ajusteFilasPrueba) {
       descuadres.push(
-        `filas leídas del Excel ${leidasDelExcel} != ${ESPERADO_FILAS} que declara el catálogo`,
+        `filas leídas del Excel ${leidasDelExcel} != ${ESPERADO_FILAS + ajusteFilasPrueba} que declara el catálogo`,
       );
     }
     if (contado.equipos !== aImportar.length) {
