@@ -239,13 +239,14 @@ que no abre nada.
 
 ### El `.env` de la VPS
 
-Las mismas variables que en desarrollo menos las de desarrollo, más `DOMINIO`:
+Las mismas variables que en desarrollo menos las de desarrollo, más `SITIO` y
+`REDES_PERMITIDAS` (ver «Red interna» abajo; antes era `DOMINIO`):
 
 ```
 POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
 SESSION_SECRET, ENCRYPTION_KEY
 ORGANIZACION_RAZON_SOCIAL, ORGANIZACION_NIT
-DOMINIO
+SITIO, REDES_PERMITIDAS
 ```
 
 No hacen falta `POSTGRES_PORT`, `DATABASE_URL` (la arma el compose con el nombre
@@ -367,6 +368,70 @@ CONFIRMAR=RESTAURAR ./db/restaurar.sh --en-serio /respaldos/carga-inicial.dump
 > La clave del `.env` de la VPS tiene que ser la del portátil — es el **paso 1**
 > de la puesta en marcha, y el motivo está ahí. `db/restaurar.sh` lo comprueba y
 > se niega a dar el respaldo por bueno, pero conviene no llegar ahí.
+
+## Red interna: la VM en el Proxmox de Medellín
+
+Desde octubre de 2026 RiwiStock no va a una VPS con dominio público sino a una
+VM con **IP privada** en el Proxmox de Medellín. Barranquilla llega por la VPN
+entre sedes. Cuatro personas: dos admin en Medellín, dos técnicos en
+Barranquilla. Esto cambia tres cosas respecto a lo de arriba.
+
+### El certificado es de Caddy, no de Let's Encrypt
+
+Let's Encrypt valida contra la máquina desde internet, y esta no es alcanzable.
+El `Caddyfile` usa `tls internal`: Caddy firma con una autoridad propia que
+vive en su volumen. Esa autoridad se instala **una vez en cada PC** que entra;
+sin ella, el navegador avisa «la conexión no es privada».
+
+Sacarla de la VM (es pública: es el certificado raíz, no su llave):
+
+```bash
+docker compose -f docker-compose.produccion.yml exec caddy   cat /data/caddy/pki/authorities/local/root.crt > riwistock-ca.crt
+```
+
+En cada PC con Windows: doble clic en `riwistock-ca.crt` → Instalar certificado →
+Equipo local → «Colocar todos los certificados en el siguiente almacén» →
+**Entidades de certificación raíz de confianza**. Cerrar y abrir el navegador.
+
+Si el volumen `caddy_datos` se borra, Caddy crea una autoridad nueva y hay que
+volver a instalarla en los cuatro PCs: no se borra con el resto.
+
+### Solo entran las redes de las sedes
+
+Dos capas, porque ninguna basta sola:
+
+1. **La FortiGate**: decide qué VLAN alcanza a la VM y por qué puerto (443 para
+   los usuarios, 22 solo desde el equipo de quien administra).
+2. **Caddy**: `REDES_PERMITIDAS` en el `.env` de la VM, los rangos de usuarios
+   de Medellín y de Barranquilla separados por espacios. Cualquier otra IP
+   recibe un 403 antes de llegar a la aplicación.
+
+Si alguien de Barranquilla recibe 403, la VPN puede estar cambiando su IP de
+origen. La IP real con la que llega está en el registro:
+
+```bash
+docker compose -f docker-compose.produccion.yml exec caddy tail -5 /data/acceso.log
+```
+
+Comprobado en el portátil (2026-10-28): con un rango que no incluye al cliente,
+403; con uno que sí, la petición pasa al proxy.
+
+### Instalar y actualizar: `desplegar.sh`
+
+Un solo comando, en la VM, desde la carpeta del proyecto:
+
+```bash
+bash desplegar.sh
+```
+
+Respalda la base, baja el código (`git pull --ff-only`), construye la imagen,
+aplica las migraciones con la imagen nueva y arranca, y comprueba que la
+aplicación responde. Sirve igual para la primera vez. Si un paso falla se
+detiene, y la versión que estaba corriendo sigue en pie.
+
+**Cuando la base ya tiene datos de uso, no se reemplaza con un volcado del
+portátil**: se perdería lo registrado. Los cambios de esquema van siempre por
+migración nueva, probada antes en local.
 
 ## Respaldos y restauración
 

@@ -1,8 +1,19 @@
-# HTTPS para RiwiStock.
+# HTTPS para RiwiStock, en la red interna (VM en el Proxmox de Medellín).
 #
-# Caddy saca y renueva el certificado de Let's Encrypt solo, con la condición de
-# que el dominio de {$DOMINIO} apunte ya a la IP de esta máquina y los puertos
-# 80 y 443 estén abiertos.
+# Dos cosas cambiaron respecto a la versión para una VPS con dominio público:
+#
+# 1. El certificado es de Caddy (`tls internal`), no de Let's Encrypt. La VM no
+#    es alcanzable desde internet, así que Let's Encrypt no podría validarla.
+#    Caddy firma con su propia autoridad, y esa autoridad hay que instalarla una
+#    vez en cada PC que entra (ver docs/despliegue.md, «Red interna»). Sin eso
+#    el navegador avisa «la conexión no es privada».
+#
+# 2. Solo entran las redes de las sedes. {$REDES_PERMITIDAS} es la lista de
+#    rangos de Medellín y de Barranquilla (por la VPN), separados por espacios,
+#    p. ej. «10.0.12.0/24 10.20.0.0/24». Cualquier otra IP recibe un 403 antes
+#    de llegar a la aplicación. Es la segunda capa: la primera es la FortiGate.
+#
+# {$SITIO} es cómo se entra: la IP de la VM («10.0.10.5») o un nombre interno.
 #
 # ============================================================================
 # ESTO NO ES OPCIONAL: SIN HTTPS NADIE PUEDE INICIAR SESIÓN.
@@ -13,13 +24,16 @@
 # la descarta, el login «funciona» y la siguiente petición vuelve a pedir
 # sesión. El síntoma es un bucle de login, no un error.
 
-{$DOMINIO} {
+{$SITIO} {
+	tls internal
+
 	encode zstd gzip
 
 	# Cabeceras que el navegador respeta y no cuestan nada.
 	header {
-		# Un año de HTTPS obligatorio para este dominio.
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# HTTPS obligatorio. Los navegadores lo ignoran si se entra por IP; vale
+		# en cuanto haya un nombre interno.
+		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "same-origin"
@@ -30,14 +44,25 @@
 		-Server
 	}
 
-	reverse_proxy app:3000 {
-		# `trust proxy` está puesto en server/app.ts, así que Express se cree
-		# estas cabeceras: sin ellas, el límite de intentos de login contaría
-		# todas las peticiones como si vinieran de la IP de Caddy y bloquearía a
-		# todo el mundo en cuanto alguien fallara cinco veces.
-		header_up X-Real-IP {remote_host}
+	# El candado. `handle` y no un `respond` suelto: así es imposible que el
+	# orden de las directivas deje pasar una petición al proxy antes de mirarla.
+	@fuera_de_las_sedes not remote_ip {$REDES_PERMITIDAS}
+	handle @fuera_de_las_sedes {
+		respond "Acceso restringido a las redes de RiwiStock." 403
 	}
 
+	handle {
+		reverse_proxy app:3000 {
+			# `trust proxy` está puesto en server/app.ts, así que Express se cree
+			# estas cabeceras: sin ellas, el límite de intentos de login contaría
+			# todas las peticiones como si vinieran de la IP de Caddy y bloquearía
+			# a todo el mundo en cuanto alguien fallara cinco veces.
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Aquí queda la IP de cada petición, también las rechazadas. Es donde se
+	# mira desde qué IP llega Barranquilla por la VPN si el candado la frena.
 	log {
 		output file /data/acceso.log {
 			roll_size 10MiB
