@@ -416,6 +416,20 @@ docker compose -f docker-compose.produccion.yml exec caddy tail -5 /data/acceso.
 Comprobado en el portátil (2026-10-28): con un rango que no incluye al cliente,
 403; con uno que sí, la petición pasa al proxy.
 
+### El `.env` de la VM: `preparar-env.sh`
+
+Una vez, antes de la primera instalación:
+
+```bash
+bash preparar-env.sh
+```
+
+Genera en la VM los tres secretos (contraseña de Postgres, secreto de sesión y
+`ENCRYPTION_KEY`), pregunta la IP y las redes permitidas, deja el `.env` con
+permisos 600 y enseña la llave de cifrado una sola vez para guardarla en el
+gestor de contraseñas. Si ya hay un `.env`, no hace nada: pisar una llave en
+uso deja los datos cifrados ilegibles.
+
 ### Instalar y actualizar: `desplegar.sh`
 
 Un solo comando, en la VM, desde la carpeta del proyecto:
