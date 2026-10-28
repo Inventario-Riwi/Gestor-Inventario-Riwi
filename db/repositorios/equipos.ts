@@ -75,6 +75,9 @@ const CAMPOS_PUBLICOS = {
   // qué lista de `por_estado` mirar.
   asignable: equipos.asignable,
   ubicacion_detalle: equipos.ubicacion_detalle,
+  // 0024. La parte sabe a qué computador pertenece; CE marca las salas.
+  equipo_principal_id: equipos.equipo_principal_id,
+  centro_entrenamiento: equipos.centro_entrenamiento,
   requiere_revision: equipos.requiere_revision,
   // 5e (D31). Que sea una lista cerrada tiene este precio: una columna nueva no
   // sale por la API hasta que se añade aquí, y el síntoma no dice «falta en la
@@ -101,6 +104,8 @@ export interface FiltrosEquipos {
    */
   empresa?: string;
   q?: string;
+  /** 0024: solo los de centros de entrenamiento. */
+  ce?: boolean;
   revision?: boolean;
   /** Código de `motivos_revision`. Es para lo que existe la tabla puente. */
   motivo?: string;
@@ -541,6 +546,7 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
     if (suyos) condiciones.push(suyos);
   }
   if (f.revision !== undefined) condiciones.push(eq(equipos.requiere_revision, f.revision));
+  if (f.ce !== undefined) condiciones.push(eq(equipos.centro_entrenamiento, f.ce));
   if (f.motivo) {
     // EXISTS y no JOIN: un equipo con tres motivos aparecería tres veces, y el
     // total de la paginación contaría filas en vez de equipos.
@@ -562,6 +568,8 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
       ilike(equipos.nombre_equipo, patron),
       ilike(equipos.marca, patron),
       ilike(equipos.modelo, patron),
+      // Por la sala: «P3 OCCI» encuentra los puestos de esa sala (D48, 0024).
+      ilike(equipos.ubicacion_detalle, patron),
       // Por la persona que lo tiene: el buscador lo promete («…o persona»).
       // EXISTS y no JOIN, como el filtro de motivo, y con las tablas
       // calificadas a mano: drizzle no ve el ámbito de esta subconsulta.
@@ -630,6 +638,39 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
     pagina,
     porPagina,
   };
+}
+
+/** Lo justo para enseñar un equipo como enlace dentro de otro. */
+const RESUMEN_CONJUNTO = {
+  id: equipos.id,
+  etiqueta: equipos.etiqueta,
+  categoria: equipos.categoria,
+  marca: equipos.marca,
+  modelo: equipos.modelo,
+  nombre_equipo: equipos.nombre_equipo,
+} as const;
+
+/**
+ * El conjunto de un equipo (0024): a qué computador pertenece, si es una
+ * parte, y qué partes tiene, si es un computador. Informativo: mover uno no
+ * mueve a los otros.
+ */
+export async function conjunto(id: string, bd: BD = db) {
+  const [fila] = await bd
+    .select({ principal: equipos.equipo_principal_id })
+    .from(equipos)
+    .where(eq(equipos.id, id));
+  if (!fila) return null;
+  const principal = fila.principal
+    ? ((await bd.select(RESUMEN_CONJUNTO).from(equipos).where(eq(equipos.id, fila.principal)))[0] ??
+      null)
+    : null;
+  const partes = await bd
+    .select(RESUMEN_CONJUNTO)
+    .from(equipos)
+    .where(eq(equipos.equipo_principal_id, id))
+    .orderBy(equipos.categoria, equipos.etiqueta);
+  return { principal, partes };
 }
 
 /**

@@ -598,6 +598,20 @@ INSERT INTO hallazgo
 SELECT 'H', 'contador de una empresa sin formato aprobado', count(*)
 FROM actas_consecutivo c WHERE c.empresa = 'Emerald Fire';
 
+-- 0024: los conjuntos no forman ciclos. La CHECK solo impide A→A; A→B→A lo
+-- impide que el importador cuelgue partes de computadores y nunca al revés,
+-- y esto lo comprueba sobre lo cargado.
+INSERT INTO hallazgo
+SELECT 'S', 'conjuntos en ciclo (A pertenece a B y B a A)', count(*)
+FROM equipos a JOIN equipos b ON a.equipo_principal_id = b.id
+WHERE b.equipo_principal_id = a.id;
+
+-- Y una parte de un puesto de CE está en CE, como su computador.
+INSERT INTO hallazgo
+SELECT 'S', 'parte de un puesto de CE fuera de CE', count(*)
+FROM equipos parte JOIN equipos torre ON parte.equipo_principal_id = torre.id
+WHERE torre.centro_entrenamiento AND NOT parte.centro_entrenamiento;
+
 -- 0022: nadie activo vive en una sede retirada. La migración pasó a Remoto a
 -- quienes estaban en Bogotá y Boyacá, y la API no deja entrar en una inactiva;
 -- si aparece alguien, es que se desactivó una sede con gente dentro.

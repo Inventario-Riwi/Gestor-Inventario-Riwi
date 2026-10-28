@@ -125,6 +125,11 @@ const esquemaFiltros = z.object({
    */
   empresa: z.enum([...prestatario.enumValues, 'Sin clasificar']).optional(),
   q: z.string().trim().max(120).optional(),
+  /** 0024: solo los de centros de entrenamiento. */
+  ce: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   // Se valida contra el catálogo de códigos, no como texto libre: un código
   // inexistente devolvería cero filas y parecería "no hay ninguno".
   motivo: z.enum(CODIGOS as [string, ...string[]]).optional(),
@@ -273,6 +278,21 @@ export function registrarRutasEquipos(app: Express): void {
 
   // `GET /api/equipos/:id/historial` vive en `rutas/movimientos.ts` desde la
   // etapa 5. El de aquí devolvía los UUID a pelo, sin resolver nombres.
+
+  // 0024. El conjunto del equipo: a qué computador pertenece y qué partes
+  // tiene (la pantalla y el teclado de un puesto de CE).
+  ruta(
+    app,
+    'get',
+    '/api/equipos/:id/conjunto',
+    'autenticado',
+    guardian,
+    asincrono(async (req, res) => {
+      const resultado = await repoEquipos.conjunto(validar(uuid, req.params.id));
+      if (!resultado) throw noEncontrado('Equipo');
+      res.json(resultado);
+    }),
+  );
 
   /**
    * El único endpoint que devuelve los campos cifrados, de uno en uno y solo

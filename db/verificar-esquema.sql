@@ -159,6 +159,32 @@ BEGIN
     INSERT INTO resultado VALUES ('CHECK: Emerald Fire prestado a sí misma', 'rechazado', 'rechazado');
   END;
 
+  -- 3h. 0024: una parte apunta a su computador; nadie es parte de sí mismo.
+  DECLARE
+    v_torre uuid;
+    v_pantalla uuid;
+  BEGIN
+    INSERT INTO equipos (categoria, estado, centro_entrenamiento, ubicacion_detalle)
+      VALUES ('Desktop', 'Disponible', true, 'P3 OCCI') RETURNING id INTO v_torre;
+    INSERT INTO equipos (categoria, estado, equipo_principal_id)
+      VALUES ('Monitor', 'Disponible', v_torre) RETURNING id INTO v_pantalla;
+    INSERT INTO resultado VALUES ('0024: pantalla ligada a su computador', 'aceptado', 'aceptado');
+
+    BEGIN
+      UPDATE equipos SET equipo_principal_id = id WHERE id = v_torre;
+      INSERT INTO resultado VALUES ('0024: equipo parte de sí mismo', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0024: equipo parte de sí mismo', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      DELETE FROM equipos WHERE id = v_torre;
+      INSERT INTO resultado VALUES ('0024: borrar un computador con partes', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN foreign_key_violation THEN
+      INSERT INTO resultado VALUES ('0024: borrar un computador con partes', 'rechazado', 'rechazado');
+    END;
+  END;
+
   -- 3f. 0022: el país de un remoto es lista cerrada; departamento y ciudad no.
   BEGIN
     INSERT INTO empleados (nombre, pais, departamento, ciudad)

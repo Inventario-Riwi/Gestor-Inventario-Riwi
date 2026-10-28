@@ -16,6 +16,7 @@ import { sql } from 'drizzle-orm';
 
 import type { ItemChequeo } from './acta-formato.js';
 import {
+  type AnyPgColumn,
   boolean,
   check,
   customType,
@@ -478,8 +479,27 @@ export const equipos = pgTable(
      * cada sala nueva en un error de importación.
      */
     ubicacion_detalle: text('ubicacion_detalle'),
+    /**
+     * 0024. A qué equipo pertenece esta parte: la pantalla y el teclado de un
+     * puesto de centro de entrenamiento apuntan a su computador. Informativo:
+     * trasladar o dar de baja el computador no mueve sus partes.
+     */
+    equipo_principal_id: uuid('equipo_principal_id').references(
+      (): AnyPgColumn => equipos.id,
+      { onDelete: 'restrict' },
+    ),
+    /** 0024. Es de una sala de entrenamiento (CE); la sala va en `ubicacion_detalle`. */
+    centro_entrenamiento: boolean('centro_entrenamiento').notNull().default(false),
   },
   (t) => [
+    // 0024. Nadie es parte de sí mismo.
+    check(
+      'equipos_principal_no_es_si_mismo',
+      sql`equipo_principal_id IS NULL OR equipo_principal_id <> id`,
+    ),
+    index('idx_equipos_principal')
+      .on(t.equipo_principal_id)
+      .where(sql`equipo_principal_id IS NOT NULL`),
     // Invariante del §2. Es una equivalencia, no una implicación: un equipo
     // 'Asignado' sin responsable y un responsable sobre un equipo 'Disponible'
     // son ambos el mismo error de estado. Ninguno de los dos lados puede ser

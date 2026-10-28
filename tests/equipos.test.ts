@@ -26,6 +26,7 @@ import {
   contarEquiposConEtiqueta,
   contarAuditoria,
   crearEmpleado,
+  ligarPuestoCe,
   estadoDe,
   licenciaTipoDe,
   marcarEquipo,
@@ -1110,5 +1111,85 @@ describe('ficha: editar los datos del equipo y leer su historial', () => {
     assert.equal(movimientos[0].tipo, 'Asignación', 'lo más reciente no va primero');
     assert.equal(movimientos[0].empleado_destino, nombre, 'el historial no trae el nombre');
     assert.ok(movimientos[0].usuario, 'no dice quién lo registró');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0024: centros de entrenamiento y el conjunto de cada puesto
+// ---------------------------------------------------------------------------
+
+describe('CE: el conjunto del puesto, el filtro y la búsqueda por sala', () => {
+  const suite = ambito('ce');
+  let admin: UsuarioDePrueba;
+  let sede: string;
+  const creados: string[] = [];
+  let c: Cliente;
+  let torre: string;
+  let pantalla: string;
+  let suelto: string;
+  const sala = `${suite.prefijo}SALA`;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    sede = await primeraSede();
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+    const crear = async (sufijo: string, categoria: string) => {
+      const r = await c.post('/api/equipos', {
+        categoria,
+        etiqueta: `${suite.prefijo}${sufijo}`,
+        serial: `SN-${suite.prefijo}${sufijo}`,
+        estado: 'Disponible',
+        sede_id: sede,
+      });
+      assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+      const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+      creados.push(id);
+      return id;
+    };
+    torre = await crear('TORRE', 'Desktop');
+    pantalla = await crear('PANT', 'Monitor');
+    suelto = await crear('SUELTO', 'Portátil');
+    await ligarPuestoCe(torre, pantalla, sala);
+  });
+
+  after(async () => {
+    // La parte primero: la torre no se borra mientras tenga partes (RESTRICT).
+    await borrarEquipos([pantalla]);
+    await borrarEquipos(creados.filter((id) => id !== pantalla));
+    await suite.limpiar();
+  });
+
+  type Conjunto = { principal: { id: string } | null; partes: { id: string }[] };
+
+  it('el computador lista sus partes, y la parte dice a quién pertenece', async () => {
+    const deTorre = await c.get(`/api/equipos/${torre}/conjunto`);
+    assert.equal(deTorre.estado, 200, JSON.stringify(deTorre.cuerpo));
+    const t = deTorre.cuerpo as Conjunto;
+    assert.equal(t.principal, null);
+    assert.deepEqual(t.partes.map((p) => p.id), [pantalla]);
+
+    const deParte = (await c.get(`/api/equipos/${pantalla}/conjunto`)).cuerpo as Conjunto;
+    assert.equal(deParte.principal?.id, torre);
+    assert.equal(deParte.partes.length, 0);
+
+    // Y uno sin conjunto no tiene ni lo uno ni lo otro.
+    const solo = (await c.get(`/api/equipos/${suelto}/conjunto`)).cuerpo as Conjunto;
+    assert.equal(solo.principal, null);
+    assert.equal(solo.partes.length, 0);
+  });
+
+  it('el filtro de CE trae los del puesto y no el suelto', async () => {
+    const r = await c.get(`/api/equipos?ce=true&q=${encodeURIComponent(suite.prefijo)}`);
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    const ids = (r.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id).sort();
+    assert.deepEqual(ids, [torre, pantalla].sort());
+  });
+
+  it('buscar por el nombre de la sala encuentra el puesto', async () => {
+    const r = await c.get(`/api/equipos?q=${encodeURIComponent(sala)}`);
+    const ids = (r.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id);
+    assert.ok(ids.includes(torre) && ids.includes(pantalla), 'no encontró el puesto por su sala');
+    assert.ok(!ids.includes(suelto), 'trajo un equipo de otra sala');
   });
 });

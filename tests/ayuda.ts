@@ -11,7 +11,7 @@ import { AddressInfo } from 'node:net';
 
 import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
-import { eq, like, sql } from 'drizzle-orm';
+import { eq, inArray, like, sql } from 'drizzle-orm';
 
 import { cifrar } from '../db/cifrado.js';
 import { db, pool } from '../db/cliente.js';
@@ -1073,4 +1073,20 @@ export async function borrarLicencias(ids: string[]): Promise<void> {
     await db.execute(sql`DELETE FROM auditoria WHERE auditoria.registro_id = ${id}`);
     await db.execute(sql`DELETE FROM licencias WHERE licencias.id = ${id}`);
   }
+}
+
+/**
+ * 0024. Liga una parte a su computador y marca los dos como CE, por SQL: en la
+ * aplicación eso solo lo escribe el importador.
+ */
+export async function ligarPuestoCe(
+  computador: string,
+  parte: string,
+  sala: string,
+): Promise<void> {
+  await db
+    .update(equipos)
+    .set({ centro_entrenamiento: true, ubicacion_detalle: sala })
+    .where(inArray(equipos.id, [computador, parte]));
+  await db.update(equipos).set({ equipo_principal_id: computador }).where(eq(equipos.id, parte));
 }

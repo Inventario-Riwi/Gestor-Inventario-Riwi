@@ -169,6 +169,13 @@
       "when": 1786600800000,
       "tag": "0023_estado_y_activo_coinciden",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786604400000,
+      "tag": "0024_conjuntos_y_centros_de_entrenamiento",
+      "breakpoints": true
     }
   ]
 }

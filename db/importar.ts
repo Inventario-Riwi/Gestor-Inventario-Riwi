@@ -660,6 +660,8 @@ interface Candidata {
     asignable: boolean;
     /** D48: la sala dentro de la sede, cuando la hoja la trae. */
     ubicacion_detalle: string | null;
+    /** 0024: es de un centro de entrenamiento (`INV - CE`). */
+    centro_entrenamiento?: boolean;
   };
 }
 
@@ -813,9 +815,13 @@ function candidataDeEquipo(
 
   if (!persona) {
     if (estado === 'Asignado') {
-      // Violar el invariante no es una opción: entra como Disponible y marcada.
+      // Violar el invariante no es una opción: entra como Disponible.
       estado = 'Disponible';
-      anota('ASIGNADO_SIN_RESPONSABLE');
+      // Y marcada solo si la hoja es de cosas que se entregan a personas. En
+      // una de infraestructura (CE, rack, salas…) «Asignado» significa «en
+      // uso» y no hay columna de responsable (D50): marcarla llenaba la
+      // bandeja con 177 puestos de CE sin nada que revisar.
+      if (f.fuente.mapa.asignable) anota('ASIGNADO_SIN_RESPONSABLE');
     }
   } else if (estado === 'Asignado') {
     responsable = persona;
@@ -1577,6 +1583,21 @@ async function main() {
     }
   }
 
+  /**
+   * Centros de entrenamiento (0024). Todo `INV - CE` es de RIWI y está en
+   * Medellín: la columna UBICACIÓN trae la SALA («P3 OCCI», «P4 ORI»…), no la
+   * sede. Sin esto, la sala se buscaba como sede, no aparecía, y los 177
+   * puestos —con sus pantallas y teclados— caían en la bandeja por
+   * UBICACION_FUERA_DE_SEDES. La sala se conserva en `ubicacion_detalle` (D48).
+   */
+  for (const c of candidatas) {
+    if (c.hoja !== 'INV - CE') continue;
+    c.sedeNombre = 'Medellín';
+    c.datos.ubicacion_detalle = limpio(c.ubicacionOriginal) ?? c.datos.ubicacion_detalle;
+    c.datos.centro_entrenamiento = true;
+    c.motivos = c.motivos.filter((m) => m !== 'UBICACION_FUERA_DE_SEDES');
+  }
+
   for (const { fuente, filas: filasPe } of perifericosPorHoja) {
     const dupSerialPe = repetidos(filasPe, 'serial');
 
@@ -1669,6 +1690,7 @@ async function main() {
     empleados: 0,
     movimientos: 0,
     motivos: 0,
+    vinculadas: 0,
     licencias: 0,
     licenciasSinEquipo: 0,
   };
@@ -1866,6 +1888,31 @@ async function main() {
     if (filasMotivos.length > 0) await tx.insert(equiposMotivosRevision).values(filasMotivos);
     resumen.motivos = filasMotivos.length;
 
+    // --- el vínculo de cada pantalla y teclado de CE con su computador (0024).
+    //     Salen de la misma fila del Excel: la parte (esEquipo = false) y su
+    //     equipo (esEquipo = true) comparten archivo, hoja y número de fila.
+    //     `insertados` viene en el orden de `aImportar` (ver licencias, abajo).
+    const principalPorFila = new Map<string, string>();
+    aImportar.forEach((c, i) => {
+      if (c.hoja === 'INV - CE' && c.esEquipo) {
+        principalPorFila.set(`${c.archivo}|${c.hoja}|${c.fila}`, insertados[i].id);
+      }
+    });
+    let vinculadas = 0;
+    for (const [i, c] of aImportar.entries()) {
+      if (c.hoja !== 'INV - CE' || c.esEquipo) continue;
+      const principal = principalPorFila.get(`${c.archivo}|${c.hoja}|${c.fila}`);
+      // Si el computador de esa fila no entró (rechazado), la parte se queda
+      // sin vínculo: su nota sigue diciendo con qué etiqueta iba.
+      if (!principal) continue;
+      await tx
+        .update(equipos)
+        .set({ equipo_principal_id: principal })
+        .where(eq(equipos.id, insertados[i].id));
+      vinculadas++;
+    }
+    resumen.vinculadas = vinculadas;
+
     // -----------------------------------------------------------------------
     // Licencias (D43)
     // -----------------------------------------------------------------------
@@ -2056,6 +2103,9 @@ async function main() {
   console.log(`  sin equipo:        ${empleadosSinEquipo.length}`);
   console.log(`Movimientos 'Alta':  ${resumen.movimientos}`);
   console.log(`Motivos registrados: ${resumen.motivos}`);
+  if (resumen.vinculadas > 0) {
+    console.log(`Partes de CE ligadas a su computador: ${resumen.vinculadas}`);
+  }
   console.log(`Reconciliación:      OK, y contra los números esperados de decisiones-05`);
   console.log(`\nMotivos (${bloques.reduce((a, [, f]) => a + f.length, 0)} en total):`);
   for (const [m, filas] of bloques) console.log(`  ${String(filas.length).padStart(3)}  ${m}`);

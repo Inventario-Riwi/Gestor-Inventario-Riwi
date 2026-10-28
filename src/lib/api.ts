@@ -118,8 +118,20 @@ export interface FiltrosEquipos {
   empresa?: string;
   q?: string;
   motivo?: string;
+  /** 0024: solo los de centros de entrenamiento. */
+  ce?: boolean;
   pagina?: number;
   porPagina?: number;
+}
+
+/** Un equipo como enlace dentro de otro (0024). */
+export interface EquipoEnConjunto {
+  id: string;
+  etiqueta: string | null;
+  categoria: string;
+  marca: string | null;
+  modelo: string | null;
+  nombre_equipo: string | null;
 }
 
 export const api = {
@@ -385,6 +397,12 @@ export const api = {
 
   /** La tabla de transiciones. Se pide una vez y vale para todos los equipos. */
   transiciones: () => pedir<CatalogoTransiciones>('/api/transiciones'),
+
+  /** 0024. A qué computador pertenece y qué partes tiene. */
+  conjunto: (equipoId: string) =>
+    pedir<{ principal: EquipoEnConjunto | null; partes: EquipoEnConjunto[] }>(
+      `/api/equipos/${equipoId}/conjunto`,
+    ),
 
   /** Historial con nombres resueltos, y el traslado abierto si lo hay. */
   historial: (equipoId: string) =>

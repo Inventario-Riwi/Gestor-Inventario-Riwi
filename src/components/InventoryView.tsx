@@ -26,6 +26,7 @@ import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
+import { ConjuntoEquipo } from './ConjuntoEquipo';
 import { EditarEquipo } from './EditarEquipo';
 import { HistorialEquipo } from './HistorialEquipo';
 import { NotasEquipo } from './NotasEquipo';
@@ -78,6 +79,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [categoria, setCategoria] = useState<CategoriaEquipo | ''>('');
   const [sede, setSede] = useState('');
   const [empresa, setEmpresa] = useState('');
+  /** 0024: solo los equipos de centros de entrenamiento. */
+  const [soloCe, setSoloCe] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [pagina, setPagina] = useState(1);
 
@@ -130,7 +133,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setError(null);
     }
     try {
-      const filtros = { estado, categoria, sede, empresa, q: searchTerm, pagina, porPagina };
+      const filtros = {
+        estado,
+        categoria,
+        sede,
+        empresa,
+        q: searchTerm,
+        ce: soloCe || undefined,
+        pagina,
+        porPagina,
+      };
       const datos =
         pestana === 'revision'
           ? await api.revision({ ...filtros, motivo })
@@ -157,7 +169,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } finally {
       if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, pagina]);
+  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, pagina]);
 
   useSondeo(() => cargar({ silencioso: true }));
 
@@ -198,7 +210,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   // Cualquier cambio de filtro vuelve a la primera página: si no, filtrar
   // estando en la página 4 puede dejar la tabla vacía sin explicación.
-  useEffect(() => setPagina(1), [pestana, estado, categoria, sede, empresa, motivo, searchTerm]);
+  useEffect(
+    () => setPagina(1),
+    [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe],
+  );
 
   const nombreSede = (id: string | null) =>
     id ? (sedes.find((s) => s.id === id)?.nombre ?? '—') : '—';
@@ -504,7 +519,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </option>
           ))}
         </select>
-        {(estado || categoria || sede || searchTerm || motivo) && (
+        {/* 0024. Las salas de entrenamiento: un clic para verlas solas. */}
+        <button
+          type="button"
+          onClick={() => setSoloCe((v) => !v)}
+          aria-pressed={soloCe}
+          className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+            soloCe
+              ? 'bg-riwi text-white border-riwi'
+              : 'border-line bg-surface text-ink hover:bg-surface-alt'
+          }`}
+        >
+          Centros de entrenamiento
+        </button>
+        {(estado || categoria || sede || searchTerm || motivo || soloCe) && (
           <button
             onClick={() => {
               setEstado('');
@@ -512,6 +540,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               setSede('');
               setMotivo('');
               setSearchTerm('');
+              setSoloCe(false);
             }}
             className="px-3 py-2 text-sm text-ink-muted hover:text-ink flex items-center gap-1"
           >
@@ -616,7 +645,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-ink-muted">{nombreSede(e.sede_id)}</td>
+                    <td className="px-4 py-3 text-ink-muted">
+                      {nombreSede(e.sede_id)}
+                      {/* 0024. CE y su sala, a la vista: es lo primero que se
+                          pregunta de un puesto de entrenamiento. */}
+                      {e.centro_entrenamiento && (
+                        <div>
+                          <span className="inline-block mt-1 text-[11px] px-1.5 py-0.5 rounded border border-riwi/40 bg-riwi-subtle text-riwi">
+                            CE{e.ubicacion_detalle ? ` · ${e.ubicacion_detalle}` : ''}
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {e.motivos_revision.length > 0 ? (
                         <span className="inline-flex items-center gap-1 text-xs text-ink">
@@ -665,6 +705,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           equipo={seleccionado}
           sede={nombreSede(seleccionado.sede_id)}
           onCerrar={() => setSeleccionado(null)}
+          onAbrir={(id) => {
+            // Un enlace del conjunto: abre la ficha de esa parte (o de su
+            // computador) en el mismo panel.
+            api.equipo(id).then(
+              (r) => setSeleccionado(r.equipo),
+              () => undefined,
+            );
+          }}
           onMutado={(actualizado) => {
             // El detalle se queda abierto con el equipo ya cambiado: encadenar
             // dos operaciones —reservar y luego asignar— es lo normal, y
@@ -762,7 +810,9 @@ const Detalle: React.FC<{
   onCerrar: () => void;
   /** Una mutación cambia el equipo y los conteos: hay que recargar el listado. */
   onMutado: (equipo: EquipoConMotivos) => void;
-}> = ({ equipo, sede, onCerrar, onMutado }) => {
+  /** 0024. Abrir otra ficha desde el conjunto. */
+  onAbrir: (id: string) => void;
+}> = ({ equipo, sede, onCerrar, onMutado, onAbrir }) => {
   const [editando, setEditando] = useState(false);
 
   return (
@@ -778,6 +828,11 @@ const Detalle: React.FC<{
           <div>
             <h2 className="text-lg font-bold text-ink">{nombreDe(equipo)}</h2>
             <p className="text-sm text-ink-muted font-mono">{equipo.etiqueta ?? 'sin etiqueta'}</p>
+            {equipo.centro_entrenamiento && (
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded border border-riwi/40 bg-riwi-subtle text-riwi">
+                Centro de entrenamiento{equipo.ubicacion_detalle ? ` · Sala ${equipo.ubicacion_detalle}` : ''}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             {!editando && (
@@ -798,6 +853,9 @@ const Detalle: React.FC<{
         {/* Antes esto solo listaba los motivos. Ahora también los cierra: ver
             `ResolverMotivos`. Una bandeja que solo se lee no se vacía nunca. */}
         <ResolverMotivos equipo={equipo} onCambiado={onMutado} />
+
+        {/* 0024. El computador y sus partes, con enlace a cada ficha. */}
+        <ConjuntoEquipo equipo={equipo} onAbrir={onAbrir} />
 
         {editando ? (
           <EditarEquipo
