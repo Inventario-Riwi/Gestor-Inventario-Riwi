@@ -15,6 +15,15 @@
 #
 # {$SITIO} es cómo se entra: la IP de la VM («10.0.10.5») o un nombre interno.
 #
+# `default_sni`: quien entra por IP no manda SNI (los navegadores no lo mandan
+# para direcciones IP), y sin SNI Caddy no sabe qué certificado enseñar: el
+# saludo TLS falla y el navegador dice que no puede conectar. Con esto, a falta
+# de SNI se usa el del sitio. Lo destapó la primera entrada real a la VM.
+
+{
+	default_sni {$SITIO}
+}
+#
 # ============================================================================
 # ESTO NO ES OPCIONAL: SIN HTTPS NADIE PUEDE INICIAR SESIÓN.
 # ============================================================================
