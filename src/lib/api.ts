@@ -215,6 +215,7 @@ export const api = {
       sede?: string;
       empresa?: string;
       activo?: boolean;
+      estado?: string;
       pagina?: number;
       porPagina?: number;
     } = {},

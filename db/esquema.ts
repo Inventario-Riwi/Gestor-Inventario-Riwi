@@ -278,6 +278,9 @@ export const empleados = pgTable(
   (t) => [
     index('idx_empleados_sede').on(t.sede_id),
     index('idx_empleados_empresa').on(t.empresa),
+    // 0023. Desactivado ⟺ estado Inactivo. Las dos columnas dicen lo mismo y
+    // la tarjeta llegó a enseñar las dos cosas a la vez.
+    check('empleados_activo_es_estado', sql`activo = (estado <> 'Inactivo')`),
   ],
 );
 

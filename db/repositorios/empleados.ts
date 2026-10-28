@@ -34,6 +34,8 @@ export interface FiltrosEmpleados {
   q?: string;
   sede?: string;
   activo?: boolean;
+  /** 0023: el filtro único de la pantalla; `Inactivo` equivale a `activo = false`. */
+  estado?: string;
   pagina?: number;
   porPagina?: number;
 }
@@ -43,6 +45,7 @@ export async function listar(f: FiltrosEmpleados = {}, bd: BD = db) {
   if (f.sede) condiciones.push(eq(empleados.sede_id, f.sede));
   if (f.empresa) condiciones.push(eq(empleados.empresa, f.empresa as never));
   if (f.activo !== undefined) condiciones.push(eq(empleados.activo, f.activo));
+  if (f.estado) condiciones.push(eq(empleados.estado, f.estado as never));
   if (f.q) {
     const patron = `%${f.q}%`;
     const busqueda = or(

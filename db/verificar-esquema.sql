@@ -175,6 +175,29 @@ BEGIN
     INSERT INTO resultado VALUES ('0022: país fuera de la lista', 'rechazado', 'rechazado');
   END;
 
+  -- 3g. 0023: desactivado ⟺ estado Inactivo. Los dos lados de la mentira, y
+  -- el caso que sí vale, para que una CHECK al revés no pase en verde.
+  BEGIN
+    INSERT INTO empleados (nombre, estado, activo) VALUES ('verif activo-inactivo', 'Inactivo', true);
+    INSERT INTO resultado VALUES ('0023: Inactivo pero activo', 'rechazado', 'ACEPTADO');
+  EXCEPTION WHEN check_violation THEN
+    INSERT INTO resultado VALUES ('0023: Inactivo pero activo', 'rechazado', 'rechazado');
+  END;
+
+  BEGIN
+    INSERT INTO empleados (nombre, estado, activo) VALUES ('verif desactivado-activo', 'Activo', false);
+    INSERT INTO resultado VALUES ('0023: Activo pero desactivado', 'rechazado', 'ACEPTADO');
+  EXCEPTION WHEN check_violation THEN
+    INSERT INTO resultado VALUES ('0023: Activo pero desactivado', 'rechazado', 'rechazado');
+  END;
+
+  BEGIN
+    INSERT INTO empleados (nombre, estado, activo) VALUES ('verif offboarding', 'Offboarding', true);
+    INSERT INTO resultado VALUES ('0023: Offboarding y activo', 'aceptado', 'aceptado');
+  EXCEPTION WHEN check_violation THEN
+    INSERT INTO resultado VALUES ('0023: Offboarding y activo', 'aceptado', 'RECHAZADO');
+  END;
+
   -- Y sin país también entra: las fichas viejas no se bloquean (D30).
   BEGIN
     INSERT INTO empleados (nombre) VALUES ('verif sin ubicación');

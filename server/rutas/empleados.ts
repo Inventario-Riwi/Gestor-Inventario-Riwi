@@ -38,6 +38,39 @@ const campos = z.object({
 
 type DatosEmpleado = z.infer<typeof campos>;
 
+/**
+ * 0023: `activo` y `estado = 'Inactivo'` dicen lo mismo, y la base lo exige.
+ * Quien manda uno solo recibe el otro puesto; quien manda los dos
+ * contradiciéndose, 400 — elegir por él sería adivinar.
+ *
+ * Al reactivar, el estado vuelve a `Activo`: el que tenía antes de
+ * desactivarse ya no se sabe, y `Activo` es lo que significa poder recibir
+ * equipos otra vez.
+ */
+function sincronizarEstado<T extends Partial<DatosEmpleado>>(
+  datos: T,
+  actual: Pick<DatosEmpleado, 'estado' | 'activo'> | null,
+): T {
+  const { estado, activo } = datos;
+  if (estado !== undefined && activo !== undefined) {
+    if (activo !== (estado !== 'Inactivo')) {
+      throw new ErrorHttp(
+        400,
+        'Estado y activo se contradicen: «Inactivo» es exactamente no estar activo.',
+      );
+    }
+    return datos;
+  }
+  if (estado !== undefined) return { ...datos, activo: estado !== 'Inactivo' };
+  if (activo !== undefined) {
+    if (!activo) return { ...datos, estado: 'Inactivo' };
+    // Reactivar a quien estaba inactivo lo devuelve a Activo; quien ya estaba
+    // activo conserva su estado (Onboarding, Offboarding…).
+    if (actual === null || actual.estado === 'Inactivo') return { ...datos, estado: 'Activo' };
+  }
+  return datos;
+}
+
 const vacio = (v: string | null | undefined) => !v || v.trim() === '';
 
 /**
@@ -106,6 +139,7 @@ const esquemaFiltros = z.object({
   q: z.string().trim().max(120).optional(),
   sede: uuid.optional(),
   empresa: z.enum(empresaEmpleado.enumValues).optional(),
+  estado: z.enum(estadoEmpleado.enumValues).optional(),
   activo: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
@@ -178,7 +212,10 @@ export function registrarRutasEmpleados(app: Express): void {
     'autenticado',
     guardian,
     asincrono(async (req, res) => {
-      const datos = await aplicarReglasDeSede(validar(esquemaCrear, req.body), null);
+      const datos = await aplicarReglasDeSede(
+        sincronizarEstado(validar(esquemaCrear, req.body), null),
+        null,
+      );
       res.status(201).json({ empleado: await repoEmpleados.crear(datos) });
     }),
   );
@@ -191,10 +228,14 @@ export function registrarRutasEmpleados(app: Express): void {
     guardian,
     asincrono(async (req, res) => {
       const id = validar(uuid, req.params.id);
-      const datos = validar(esquemaActualizar, req.body);
+      const entrada = validar(esquemaActualizar, req.body);
 
       const empleado = await repoEmpleados.porId(id);
       if (!empleado) throw noEncontrado('Empleado');
+
+      // Antes del bloqueo de abajo: poner el estado en «Inactivo» también es
+      // desactivar, y tiene que pasar por la misma comprobación de equipos.
+      const datos = sincronizarEstado(entrada, empleado);
 
       /**
        * Desactivar a alguien con equipos a su nombre se bloquea, y la respuesta

@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Search,
   UserPlus,
-  UserX,
   Users,
   X,
 } from 'lucide-react';
@@ -69,8 +68,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const [q, setQ] = useState('');
   const [sede, setSede] = useState('');
   const [empresa, setEmpresa] = useState<'' | Empresa>('');
+  /** 0023: un solo filtro de estado. `Inactivo` es lo mismo que desactivado. */
   const [estado, setEstado] = useState('');
-  const [soloActivos, setSoloActivos] = useState<'' | 'true' | 'false'>('');
   const [pagina, setPagina] = useState(1);
 
   const [filas, setFilas] = useState<EmpleadoConConteo[]>([]);
@@ -126,7 +125,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         q,
         sede,
         empresa: empresa || undefined,
-        activo: soloActivos === '' ? undefined : soloActivos === 'true',
+        estado: estado || undefined,
         pagina,
         porPagina,
       });
@@ -146,7 +145,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     } finally {
       if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [q, sede, empresa, soloActivos, pagina]);
+  }, [q, sede, empresa, estado, pagina]);
 
   useSondeo(() => cargar({ silencioso: true }));
 
@@ -184,7 +183,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     );
   }, []);
 
-  useEffect(() => setPagina(1), [q, sede, empresa, estado, soloActivos]);
+  useEffect(() => setPagina(1), [q, sede, empresa, estado]);
 
   const desplegar = async (emp: EmpleadoConConteo) => {
     if (desplegado === emp.id) {
@@ -229,7 +228,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     return lugar ? `${nombre} · ${lugar}` : nombre;
   };
 
-  const visibles = estado ? filas.filter((e) => e.estado === estado) : filas;
+  // El estado lo filtra el servidor (0023): filtrar aquí solo veía la página.
+  const visibles = filas;
   const ultimaPagina = Math.max(1, Math.ceil(total / porPagina));
 
   return (
@@ -354,7 +354,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           <option value="">Todos los estados</option>
           {ESTADOS_EMPLEADO.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {s === 'Activo' ? 'Activos' : s === 'Inactivo' ? 'Inactivos' : s}
             </option>
           ))}
         </select>
@@ -369,15 +369,6 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
               {e}
             </option>
           ))}
-        </select>
-        <select
-          value={soloActivos}
-          onChange={(e) => setSoloActivos(e.target.value as '' | 'true' | 'false')}
-          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
-        >
-          <option value="">Activos e inactivos</option>
-          <option value="true">Solo activos</option>
-          <option value="false">Solo inactivos</option>
         </select>
       </div>
 
@@ -422,14 +413,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Los dos artefactos del Excel que la etapa 3 desactivó desde
-                      la API caen aquí, y tienen que verse. */}
-                  {!emp.activo && (
-                    <p className="text-[11px] text-ink-muted bg-surface-alt border border-line rounded px-2 py-1 flex items-center gap-1.5">
-                      <UserX className="w-3.5 h-3.5 shrink-0" />
-                      Inactivo: no aparece en asignaciones nuevas
-                    </p>
-                  )}
+                  {/* 0023: «Inactivo» ya lo dice el distintivo de arriba, que
+                      ahora siempre coincide con estar desactivado. La tarjeta
+                      gris basta para verlo de un vistazo. */}
 
                   {/* D30: quien está en una sede sin oficina necesita
                       dirección, porque no hay a dónde mandarle el equipo. Se

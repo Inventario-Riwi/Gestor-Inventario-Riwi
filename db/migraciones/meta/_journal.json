@@ -162,6 +162,13 @@
       "when": 1786597200000,
       "tag": "0022_sedes_y_ubicacion_remota",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786600800000,
+      "tag": "0023_estado_y_activo_coinciden",
+      "breakpoints": true
     }
   ]
 }

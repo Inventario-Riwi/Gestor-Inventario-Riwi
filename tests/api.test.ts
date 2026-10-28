@@ -757,3 +757,78 @@ describe('empleados: sedes y ubicación remota (0022)', () => {
     assert.equal(editar.estado, 200, 'bloqueó editar a quien ya estaba ahí');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0023: estado «Inactivo» y estar desactivado son lo mismo
+// ---------------------------------------------------------------------------
+
+describe('empleados: estado y activo siempre coinciden (0023)', () => {
+  const suite = ambito('estadoactivo');
+  let admin: UsuarioDePrueba;
+  const creados: string[] = [];
+  const equipos: string[] = [];
+  let c: Cliente;
+
+  type Ficha = { id: string; estado: string; activo: boolean };
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(equipos);
+    await borrarEmpleados(creados);
+    await suite.limpiar();
+  });
+
+  const nuevaPersona = async (sufijo: string) => {
+    const id = await crearEmpleado(`${suite.prefijo}${sufijo}`);
+    creados.push(id);
+    return id;
+  };
+  const ficha = (r: { cuerpo: unknown }) => (r.cuerpo as { empleado: Ficha }).empleado;
+
+  it('desactivar pone el estado en Inactivo, y reactivar lo devuelve a Activo', async () => {
+    const id = await nuevaPersona('ida-vuelta');
+    const baja = await c.patch(`/api/empleados/${id}`, { activo: false });
+    assert.equal(baja.estado, 200, JSON.stringify(baja.cuerpo));
+    assert.equal(ficha(baja).estado, 'Inactivo');
+
+    const alta = await c.patch(`/api/empleados/${id}`, { activo: true });
+    assert.equal(alta.estado, 200, JSON.stringify(alta.cuerpo));
+    assert.equal(ficha(alta).estado, 'Activo');
+    assert.equal(ficha(alta).activo, true);
+  });
+
+  it('poner el estado en Inactivo desactiva, y pasa por el bloqueo de equipos', async () => {
+    const libre = await nuevaPersona('estado-libre');
+    const r = await c.patch(`/api/empleados/${libre}`, { estado: 'Inactivo' });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(ficha(r).activo, false);
+
+    const conEquipo = await nuevaPersona('estado-con-equipo');
+    equipos.push(await crearEquipoConSecretos(`${suite.prefijo}EQ`, conEquipo));
+    const bloqueado = await c.patch(`/api/empleados/${conEquipo}`, { estado: 'Inactivo' });
+    assert.equal(bloqueado.estado, 409, 'el estado Inactivo se saltó el bloqueo de equipos');
+  });
+
+  it('mandar los dos contradiciéndose es 400, y no escribe nada', async () => {
+    const id = await nuevaPersona('contradiccion');
+    const r = await c.patch(`/api/empleados/${id}`, { estado: 'Inactivo', activo: true });
+    assert.equal(r.estado, 400, JSON.stringify(r.cuerpo));
+    const despues = await c.get(`/api/empleados/${id}`);
+    assert.equal(ficha(despues).estado, 'Activo');
+  });
+
+  it('el filtro por estado lo hace el servidor, no solo la página', async () => {
+    const id = await nuevaPersona('filtro-inactivo');
+    await c.patch(`/api/empleados/${id}`, { activo: false });
+    const r = await c.get(`/api/empleados?estado=Inactivo&q=${encodeURIComponent(suite.prefijo)}`);
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    const filas = (r.cuerpo as { filas: Ficha[] }).filas;
+    assert.ok(filas.some((f) => f.id === id), 'no trajo a la persona inactiva');
+    assert.ok(filas.every((f) => f.estado === 'Inactivo'), 'trajo a alguien que no está inactivo');
+  });
+});
