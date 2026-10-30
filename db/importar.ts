@@ -1206,7 +1206,19 @@ function detectarBloqueDuplicado(filas: Fila[]): Map<number, number> {
   const compatible = (copia: Fila, original: Fila) => {
     const a = norm(limpio(copia.celda('USUARIO RESPONSABLE')) ?? '');
     const b = norm(limpio(original.celda('USUARIO RESPONSABLE')) ?? '');
-    return a === '' || a === b;
+    if (!(a === '' || a === b)) return false;
+    /**
+     * Y la misma ETIQUETA, que es lo único que identifica una pieza física.
+     * Sin esto, el Excel de octubre de 2026 perdía 23 periféricos reales: 10
+     * bases, 7 diademas y 6 ratones en STOCK, sin etiqueta, con «N/A» o el
+     * mismo código en el serial y el mismo custodio. Filas idénticas una tras
+     * otra, que el detector leía como un pegado y eran unidades distintas.
+     * Dos filas sin etiqueta no se pueden probar copia la una de la otra, y
+     * ante la duda una fila de más es visible; una de menos, no.
+     */
+    const ea = norm(limpio(copia.por('etiqueta')) ?? '');
+    const eb = norm(limpio(original.por('etiqueta')) ?? '');
+    return ea !== '' && ea === eb;
   };
 
   const porHuella = new Map<string, number[]>();
@@ -1814,6 +1826,49 @@ async function main() {
     // las cifras de `importaciones` tienen que reflejarlo: contarlas antes
     // dejaba `filas_marcadas` por debajo de lo que la BD acaba teniendo, y el
     // grupo G del verificador lo veía.
+    /**
+     * El libro de RIWI es el de MEDELLÍN («INVENTARIO - RIWI MED»): lo que en
+     * él no dice sede, o dice una sala («P3 Rack», «Blackbird -P5 Review»…),
+     * está en Medellín. Decidido así en octubre de 2026; sin esto, las hojas
+     * de infraestructura —rack, salas, audiovisual…— caían enteras en la
+     * bandeja por SIN_UBICACION o UBICACION_FUERA_DE_SEDES.
+     *
+     * Lo que sí nombra un sitio se respeta: Barranquilla, Cartagena y Remoto
+     * (con su propio motivo, D30), y Bogotá y Boyacá —sedes retiradas en la
+     * 0022— siguen yendo a la bandeja para que alguien decida.
+     */
+    const SEDES_RETIRADAS = new Set(['bogota', 'boyaca']);
+    for (const c of aImportar) {
+      if (c.archivo !== RUTAS.RIWI) continue;
+      const original = limpio(c.ubicacionOriginal) ?? '';
+      const n = norm(original);
+      if (n === '') {
+        // Prestado y sin ubicación: lo tiene el prestatario, sin sede (§I).
+        c.sedeNombre = c.datos.estado === 'Prestado' ? null : 'Medellín';
+        c.motivos = c.motivos.filter((m) => m !== 'SIN_UBICACION');
+        continue;
+      }
+      const esSede = c.sedeNombre !== null && sedePorNombre.has(norm(c.sedeNombre));
+      if (esSede || n.startsWith('remoto') || [...SEDES_RETIRADAS].some((s) => n.startsWith(s))) {
+        continue;
+      }
+      // Un PRESTADO lo tiene el prestatario: no se le pone la sede del dueño
+      // (verificar-datos §I lo cuenta como error). Sin sede y sin marca por
+      // ubicación —que no diga dónde está es lo normal en un préstamo—, y la
+      // sala que traía, como nota de dónde estaba.
+      if (c.datos.estado === 'Prestado') {
+        c.sedeNombre = null;
+        c.datos.ubicacion_detalle = original;
+        c.motivos = c.motivos.filter(
+          (m) => m !== 'UBICACION_FUERA_DE_SEDES' && m !== 'SIN_UBICACION',
+        );
+        continue;
+      }
+      c.sedeNombre = 'Medellín';
+      c.datos.ubicacion_detalle = original;
+      c.motivos = c.motivos.filter((m) => m !== 'UBICACION_FUERA_DE_SEDES');
+    }
+
     for (const c of aImportar) {
       if (!c.sedeNombre) continue;
       const sede_id = sedePorNombre.get(norm(c.sedeNombre)) ?? null;
