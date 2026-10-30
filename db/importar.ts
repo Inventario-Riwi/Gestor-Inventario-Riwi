@@ -83,7 +83,8 @@ interface Fuente {
  * compara la de BBL, que es justo lo que la primera regla responde.
  */
 /**
- * Carga de PRUEBA de una sola hoja: `npm run import -- "INV - CE"`.
+ * Carga de PRUEBA de una sola hoja: `npm run import -- "INV - CE"`, o de un
+ * libro entero: `npm run import -- RIWI` (todas las hojas de esa empresa).
  *
  * Solo para probar en el portátil antes de la carga de verdad. Se lee nada
  * más el libro de esa hoja, y todas las comprobaciones siguen —conteo de
@@ -93,17 +94,18 @@ interface Fuente {
  */
 const SOLO_HOJA = process.argv[2]?.trim() || null;
 
-const FUENTES: Fuente[] = HOJAS.filter((mapa) => !SOLO_HOJA || mapa.nombre === SOLO_HOJA).map(
-  (mapa) => ({
+const FUENTES: Fuente[] = HOJAS.filter(
+  (mapa) => !SOLO_HOJA || mapa.nombre === SOLO_HOJA || mapa.empresa === SOLO_HOJA,
+).map((mapa) => ({
     empresa: mapa.empresa,
     ruta: RUTAS[mapa.empresa],
     mapa,
-  }),
-);
+}));
 
 if (SOLO_HOJA && FUENTES.length === 0) {
   throw new Error(
-    `No hay ninguna hoja llamada "${SOLO_HOJA}" en el catálogo. Las que hay:\n` +
+    `No hay ninguna hoja ni empresa llamada "${SOLO_HOJA}" en el catálogo. ` +
+      `Empresas: ${[...new Set(HOJAS.map((h) => h.empresa))].join(', ')}. Hojas:\n` +
       HOJAS.map((h) => `  ${h.nombre}  (${RUTAS[h.empresa]})`).join('\n'),
   );
 }
@@ -1445,7 +1447,7 @@ function escribirReporte(candidatas: Candidata[]) {
 async function main() {
   if (SOLO_HOJA) {
     console.log(
-      `\n*** CARGA DE PRUEBA: solo la hoja "${SOLO_HOJA}" de ${FUENTES[0].ruta}. ` +
+      `\n*** CARGA DE PRUEBA: solo "${SOLO_HOJA}" (${FUENTES.length} hojas) de ${FUENTES[0].ruta}. ` +
         `No llevar esta base a la VM. ***\n`,
     );
   }

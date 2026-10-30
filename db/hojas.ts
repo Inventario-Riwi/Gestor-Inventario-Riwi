@@ -169,8 +169,48 @@ export const HOJAS: MapaHoja[] = [
       sesion: 'SESION DE USUARIO',
       observaciones: 'OBSERVACIONES',
     },
-    filasEsperadas: 78,
+    // Era 78. El Excel de octubre de 2026 trae 66: las columnas no cambiaron.
+    filasEsperadas: 66,
     procedencia: 'INV RIWI STAFF',
+  },
+
+  /**
+   * Los portátiles dados de baja. Hoja nueva del Excel de octubre de 2026, con
+   * las MISMAS columnas que `INV RIWI STAFF`. Se importa: un equipo de baja
+   * sigue siendo parte del historial, y su serial no debe reaparecer como si
+   * fuera nuevo. Entran con el estado que diga la fila («De baja»); la que no
+   * dice ninguno va a la bandeja (ESTADO_NO_APLICA), como en cualquier hoja.
+   */
+  {
+    nombre: 'EQUIPOS DE BAJA',
+    empresa: 'RIWI',
+    clase: 'equipo',
+    asignable: true,
+    exigidas: ['TIPO EQUIPO', 'SERIAL EQUIPO', 'ETIQUETA', 'ESTADO DEL EQUIPO'],
+    col: {
+      tipo: 'TIPO EQUIPO',
+      marca: 'MARCA',
+      modelo: 'MODELO',
+      serial: 'SERIAL EQUIPO',
+      serialCargador: 'SERIAL ADAPTADOR DE CARGA',
+      garantia: 'GARANTIA VENC.',
+      etiqueta: 'ETIQUETA',
+      nombreEquipo: 'NOMBRE EQUIPO',
+      sistemaOperativo: 'SISTEMA OPERATIVO',
+      serialWindows: 'SERIAL WINDOWS',
+      tipoLicencia: 'TIPO DE LICENCIA',
+      tamano: 'TAMAÑO',
+      procesador: 'PROCESADOR',
+      disco: 'DISCO',
+      ram: 'RAM',
+      estado: 'ESTADO DEL EQUIPO',
+      responsable: 'USUARIO RESPONSABLE',
+      ubicacion: 'UBICACIÓN',
+      sesion: 'SESION DE USUARIO',
+      observaciones: 'OBSERVACIONES',
+    },
+    filasEsperadas: 15,
+    procedencia: 'EQUIPOS DE BAJA',
   },
 
   /**
@@ -246,7 +286,8 @@ export const HOJAS: MapaHoja[] = [
       estado: 'ESTADO DEL EQUIPO',
       observaciones: 'OBSERVACIONES',
     },
-    filasEsperadas: 47,
+    // Era 47. El Excel de octubre de 2026 trae 79, con las mismas columnas.
+    filasEsperadas: 79,
     procedencia: 'INV - PERIFERICOS',
   },
 
@@ -590,6 +631,14 @@ export const HOJAS_IGNORADAS: Record<EmpresaHoja, { nombre: string; porque: stri
     { nombre: 'Hoja3', porque: 'Vacía.' },
     { nombre: 'TABLA', porque: 'Tabla dinámica.' },
     { nombre: 'Catálogos', porque: 'Listas de validación del Excel.' },
+    {
+      nombre: 'Asignaciones por persona',
+      porque: 'Resumen con fórmulas (octubre 2026): repite lo que ya dicen las hojas de inventario.',
+    },
+    {
+      nombre: 'Aux Asignaciones',
+      porque: 'Hoja auxiliar de esas fórmulas (TODOS / ASIGNADO). No es inventario.',
+    },
   ],
   'BBL Labs': [
     { nombre: 'Dashboard', porque: 'Gráficas calculadas.' },
