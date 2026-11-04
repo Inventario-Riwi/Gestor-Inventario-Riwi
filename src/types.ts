@@ -692,6 +692,8 @@ export interface UsuarioSesion {
   email: string;
   nombre: string;
   rol: RolUsuario;
+  /** 0025. Entró con una contraseña temporal y tiene que cambiarla. */
+  debe_cambiar_password: boolean;
 }
 
 /**

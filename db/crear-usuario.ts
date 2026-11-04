@@ -1,6 +1,10 @@
 /**
  * Crea o actualiza un usuario de la aplicación.
- * `npm run usuario -- <email> <nombre> <admin|tecnico>`
+ * `npm run usuario -- <email> <nombre> <admin|tecnico> [--temporal]`
+ *
+ * `--temporal` (0025): la contraseña la elige quien crea la cuenta, así que la
+ * persona tendrá que cambiarla al entrar por primera vez. Sin la opción, la
+ * contraseña es definitiva: es para crear o restablecer la propia.
  *
  * Existe porque §2 dice «sin registro público; se siembran con un script», y
  * porque hay un problema de arranque: crear usuarios es una operación de admin,
@@ -87,10 +91,16 @@ async function pedirOculta(pregunta: string): Promise<string> {
 }
 
 async function main() {
-  const [email, nombre, rol] = process.argv.slice(2);
-  if (!email || !nombre || (rol !== 'admin' && rol !== 'tecnico')) {
-    throw new Error('Uso: npm run usuario -- <email> "<nombre>" <admin|tecnico>');
+  const [email, nombre, rol, opcion] = process.argv.slice(2);
+  if (
+    !email ||
+    !nombre ||
+    (rol !== 'admin' && rol !== 'tecnico') ||
+    (opcion !== undefined && opcion !== '--temporal')
+  ) {
+    throw new Error('Uso: npm run usuario -- <email> "<nombre>" <admin|tecnico> [--temporal]');
   }
+  const debe_cambiar_password = opcion === '--temporal';
 
   const password = await pedirOculta(`Contraseña para ${email}: `);
   // Sin eco, un error de tecleo no se ve: en una terminal se pide dos veces.
@@ -109,16 +119,19 @@ async function main() {
 
   const [fila] = await db
     .insert(usuariosApp)
-    .values({ email, nombre, rol, activo: true, password_hash })
+    .values({ email, nombre, rol, activo: true, password_hash, debe_cambiar_password })
     .onConflictDoUpdate({
       target: usuariosApp.email,
       // Cambiar la contraseña aquí invalida las sesiones abiertas de esa
       // persona: el guardián compara una huella del hash en cada petición.
-      set: { nombre, rol, activo: true, password_hash },
+      set: { nombre, rol, activo: true, password_hash, debe_cambiar_password },
     })
     .returning({ id: usuariosApp.id, email: usuariosApp.email, rol: usuariosApp.rol });
 
-  console.log(`Usuario listo: ${fila.email} (${fila.rol})`);
+  console.log(
+    `Usuario listo: ${fila.email} (${fila.rol})` +
+      (debe_cambiar_password ? ' — tendrá que cambiar la contraseña al entrar.' : ''),
+  );
 
   const [sistema] = await db
     .select({ activo: usuariosApp.activo })

@@ -46,10 +46,24 @@ export async function porEmailParaLogin(email: string, bd: BD = db) {
       rol: usuariosApp.rol,
       activo: usuariosApp.activo,
       password_hash: usuariosApp.password_hash,
+      debe_cambiar_password: usuariosApp.debe_cambiar_password,
     })
     .from(usuariosApp)
     .where(eq(usuariosApp.email, email));
   return u ?? null;
+}
+
+/**
+ * 0025. Pone la contraseña nueva y quita la marca de temporal, juntas: una
+ * cuenta no puede quedar con la contraseña cambiada y la marca puesta, o al
+ * revés. Devuelve el hash, que la sesión necesita para su huella.
+ */
+export async function cambiarPassword(id: string, password_hash: string, bd: BD = db) {
+  await bd
+    .update(usuariosApp)
+    .set({ password_hash, debe_cambiar_password: false })
+    .where(eq(usuariosApp.id, id));
+  return password_hash;
 }
 
 /**
@@ -66,6 +80,7 @@ export async function porIdParaSesion(id: string, bd: BD = db) {
       rol: usuariosApp.rol,
       activo: usuariosApp.activo,
       password_hash: usuariosApp.password_hash,
+      debe_cambiar_password: usuariosApp.debe_cambiar_password,
     })
     .from(usuariosApp)
     .where(eq(usuariosApp.id, id));

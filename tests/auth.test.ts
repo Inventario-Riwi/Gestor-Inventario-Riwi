@@ -403,3 +403,78 @@ describe('permisos: la superficie entera, no caso a caso', () => {
     assert.deepEqual(huerfanas, [], `rutas sin permiso declarado: ${huerfanas.join(', ')}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0025: contraseña temporal y su cambio obligatorio
+// ---------------------------------------------------------------------------
+
+describe('contraseña temporal: hay que cambiarla antes de nada (0025)', () => {
+  const suite = ambito('temporal');
+  let temporal: UsuarioDePrueba;
+
+  before(async () => {
+    temporal = await suite.crearUsuario({ sufijo: 'nueva', rol: 'tecnico', temporal: true });
+  });
+  after(() => suite.limpiar());
+
+  const NUEVA = 'una-propia-y-larga-2026';
+
+  it('entra, pero solo puede saber quién es: el resto es 403 con qué falta', async () => {
+    const c = nuevo();
+    const login = await c.pedir('POST', '/api/auth/login', {
+      cuerpo: { email: temporal.email, password: temporal.password },
+    });
+    assert.equal(login.estado, 200, JSON.stringify(login.cuerpo));
+    assert.equal(
+      (login.cuerpo as { usuario: { debe_cambiar_password: boolean } }).usuario.debe_cambiar_password,
+      true,
+    );
+
+    assert.equal((await c.get('/api/auth/me')).estado, 200);
+    const equipos = await c.get('/api/equipos');
+    assert.equal(equipos.estado, 403, 'con la temporal pudo leer el inventario');
+    assert.equal((equipos.cuerpo as { falta?: string }).falta, 'cambiar_password');
+  });
+
+  it('rechaza la actual equivocada, una nueva corta y una igual a la temporal', async () => {
+    const c = nuevo();
+    await c.entrar(temporal.email, temporal.password);
+    const cambiar = (actual: string, nueva: string) =>
+      c.pedir('POST', '/api/auth/cambiar-password', { cuerpo: { actual, nueva } });
+
+    assert.equal((await cambiar('no-es-esta-para-nada', NUEVA)).estado, 400);
+    assert.equal((await cambiar(temporal.password, 'corta')).estado, 400);
+    assert.equal((await cambiar(temporal.password, temporal.password)).estado, 400);
+    // Y nada de eso quitó la marca.
+    assert.equal((await c.get('/api/equipos')).estado, 403);
+  });
+
+  it('al cambiarla sigue dentro, la marca se va y la temporal deja de servir', async () => {
+    const c = nuevo();
+    await c.entrar(temporal.email, temporal.password);
+    // Otra sesión abierta con la temporal: tiene que caer con el cambio.
+    const otra = nuevo();
+    await otra.entrar(temporal.email, temporal.password);
+
+    const r = await c.pedir('POST', '/api/auth/cambiar-password', {
+      cuerpo: { actual: temporal.password, nueva: NUEVA },
+    });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(
+      (r.cuerpo as { usuario: { debe_cambiar_password: boolean } }).usuario.debe_cambiar_password,
+      false,
+    );
+
+    assert.equal((await c.get('/api/equipos')).estado, 200, 'la sesión que cambió quedó fuera');
+    assert.equal((await otra.get('/api/auth/me')).estado, 401, 'la otra sesión sobrevivió');
+
+    const vieja = await nuevo().pedir('POST', '/api/auth/login', {
+      cuerpo: { email: temporal.email, password: temporal.password },
+    });
+    assert.equal(vieja.estado, 401, 'la temporal sigue sirviendo');
+    const nueva = await nuevo().pedir('POST', '/api/auth/login', {
+      cuerpo: { email: temporal.email, password: NUEVA },
+    });
+    assert.equal(nueva.estado, 200);
+  });
+});

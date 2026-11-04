@@ -217,6 +217,11 @@ export const usuariosApp = pgTable('usuarios_app', {
   rol: rolUsuario('rol').notNull(),
   activo: boolean('activo').notNull().default(true),
   ultimo_acceso: timestamp('ultimo_acceso', { withTimezone: true }),
+  /**
+   * 0025. La contraseña es temporal (la eligió quien creó la cuenta): hasta
+   * cambiarla, el servidor no deja hacer nada más.
+   */
+  debe_cambiar_password: boolean('debe_cambiar_password').notNull().default(false),
 });
 
 /**

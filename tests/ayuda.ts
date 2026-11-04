@@ -214,6 +214,8 @@ export interface OpcionesUsuario {
   activo?: boolean;
   /** `true` deja `password_hash` en NULL, como el usuario de sistema. */
   sinHash?: boolean;
+  /** 0025. Contraseña temporal: tendrá que cambiarla antes de nada. */
+  temporal?: boolean;
 }
 
 export async function crearUsuario(
@@ -231,6 +233,7 @@ export async function crearUsuario(
       rol: opciones.rol ?? 'tecnico',
       activo: opciones.activo ?? true,
       password_hash: hash,
+      debe_cambiar_password: opciones.temporal ?? false,
     })
     .onConflictDoUpdate({
       target: usuariosApp.email,
@@ -238,6 +241,7 @@ export async function crearUsuario(
         password_hash: hash,
         activo: opciones.activo ?? true,
         rol: opciones.rol ?? 'tecnico',
+        debe_cambiar_password: opciones.temporal ?? false,
       },
     })
     .returning({ id: usuariosApp.id });

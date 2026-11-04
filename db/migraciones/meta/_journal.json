@@ -176,6 +176,13 @@
       "when": 1786604400000,
       "tag": "0024_conjuntos_y_centros_de_entrenamiento",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786608000000,
+      "tag": "0025_cambio_de_password_obligatorio",
+      "breakpoints": true
     }
   ]
 }

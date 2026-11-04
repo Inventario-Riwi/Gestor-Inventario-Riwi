@@ -134,6 +134,7 @@ export function registrarRutasAuth(app: Express): void {
           email: usuario.email,
           nombre: usuario.nombre,
           rol: usuario.rol,
+          debe_cambiar_password: usuario.debe_cambiar_password,
         },
       });
     }),
@@ -153,6 +154,56 @@ export function registrarRutasAuth(app: Express): void {
       );
       res.clearCookie('inventario.sid');
       res.status(204).end();
+    }),
+  );
+
+  /**
+   * 0025. Cambiar la propia contraseña. Lo usa sobre todo quien entra con una
+   * temporal (el guardián no le deja hacer otra cosa), pero vale para todos.
+   *
+   * Pide la ACTUAL aunque haya sesión: una sesión abierta en un PC ajeno no
+   * debe bastar para quedarse con la cuenta. Y la nueva no puede ser la misma:
+   * con la temporal, eso sería quitar la marca sin cambiar nada.
+   *
+   * Cambiar el hash invalida las demás sesiones de la persona (el guardián
+   * compara su huella); esta se actualiza para no echarla en el acto.
+   */
+  ruta(
+    app,
+    'post',
+    '/api/auth/cambiar-password',
+    'autenticado',
+    guardian,
+    crearLimitadorLogin(),
+    asincrono(async (req, res) => {
+      const entrada = z
+        .object({
+          actual: z.string().min(1).max(200),
+          nueva: z.string().min(12, 'La nueva debe tener al menos 12 caracteres.').max(200),
+        })
+        .safeParse(req.body);
+      if (!entrada.success) {
+        throw new ErrorHttp(400, entrada.error.issues[0]?.message ?? 'Entrada inválida');
+      }
+      const { actual, nueva } = entrada.data;
+      if (actual === nueva) {
+        throw new ErrorHttp(400, 'La nueva contraseña tiene que ser distinta de la actual.');
+      }
+      if (!req.usuario) throw noAutenticado();
+
+      const usuario = await repoUsuarios.porIdParaSesion(req.usuario.id);
+      if (!usuario?.password_hash || !(await bcrypt.compare(actual, usuario.password_hash))) {
+        throw new ErrorHttp(400, 'La contraseña actual no es correcta.');
+      }
+
+      const hash = await repoUsuarios.cambiarPassword(
+        usuario.id,
+        await bcrypt.hash(nueva, COSTE_BCRYPT),
+      );
+      req.session.usuario = { id: usuario.id, huella: huellaCredenciales(hash) };
+      await guardar(req);
+
+      res.json({ usuario: { ...req.usuario, debe_cambiar_password: false } });
     }),
   );
 

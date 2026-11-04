@@ -9,6 +9,7 @@ import type {
 } from './types';
 import { api } from './lib/api';
 import { useSondeo } from './lib/sondeo';
+import { CambiarPassword } from './components/CambiarPassword';
 import { Login } from './components/Login';
 
 import { Header } from './components/Header';
@@ -57,13 +58,18 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (usuario) recargarResumen();
+    // Con la contraseña temporal el servidor no deja pedir nada más (0025).
+    if (usuario && !usuario.debe_cambiar_password) recargarResumen();
   }, [usuario, recargarResumen]);
 
   // Los contadores de la barra lateral, al día con lo que hacen otros. Si un
   // tic falla se conserva el último resumen: `null` diría «no se sabe», y un
   // tic perdido no es eso.
-  useSondeo(() => (usuario ? api.resumenEquipos().then(setResumen) : undefined));
+  useSondeo(() =>
+    usuario && !usuario.debe_cambiar_password
+      ? api.resumenEquipos().then(setResumen)
+      : undefined,
+  );
 
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState<boolean>(false);
   /**
@@ -113,6 +119,16 @@ export function App() {
   }
   if (usuario === null) {
     return <Login onEntrar={setUsuario} />;
+  }
+  // 0025. Con la contraseña temporal, antes que nada, una propia.
+  if (usuario.debe_cambiar_password) {
+    return (
+      <CambiarPassword
+        usuario={usuario}
+        onCambiada={setUsuario}
+        onSalir={() => void handleCerrarSesion()}
+      />
+    );
   }
 
   return (

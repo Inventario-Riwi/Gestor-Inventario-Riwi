@@ -145,6 +145,13 @@ export const api = {
 
   salir: () => pedir<void>('/api/auth/logout', { method: 'POST' }),
 
+  /** 0025. Cambiar la propia contraseña; con una temporal es lo único permitido. */
+  cambiarPassword: (actual: string, nueva: string) =>
+    pedir<{ usuario: UsuarioSesion }>('/api/auth/cambiar-password', {
+      method: 'POST',
+      body: JSON.stringify({ actual, nueva }),
+    }),
+
   sedes: () => pedir<{ sedes: Sede[] }>('/api/sedes'),
 
   sedesConConteos: () =>

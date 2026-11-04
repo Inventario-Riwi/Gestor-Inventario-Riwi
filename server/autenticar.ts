@@ -29,7 +29,19 @@ export interface UsuarioSesion {
   email: string;
   nombre: string;
   rol: Rol;
+  /** 0025. Contraseña temporal: hasta cambiarla, solo se puede cambiarla. */
+  debe_cambiar_password: boolean;
 }
+
+/**
+ * Lo único que puede hacer alguien con la contraseña temporal (0025): saber
+ * quién es —la pantalla lo necesita para pedirle el cambio—, cambiarla y salir.
+ */
+const PERMITIDO_CON_PASSWORD_TEMPORAL = new Set([
+  '/api/auth/me',
+  '/api/auth/logout',
+  '/api/auth/cambiar-password',
+]);
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -87,7 +99,21 @@ export function guardian(permiso: Permiso): RequestHandler {
           email: usuario.email,
           nombre: usuario.nombre,
           rol: usuario.rol,
+          debe_cambiar_password: usuario.debe_cambiar_password,
         };
+
+        // 0025. Con la contraseña temporal no se toca nada más. En el servidor
+        // y no solo en la pantalla: la pantalla se salta con un `curl`.
+        if (
+          usuario.debe_cambiar_password &&
+          !PERMITIDO_CON_PASSWORD_TEMPORAL.has(req.originalUrl.split('?')[0])
+        ) {
+          throw new ErrorHttp(
+            403,
+            'Antes de seguir hay que cambiar la contraseña temporal.',
+            { falta: 'cambiar_password' },
+          );
+        }
 
         if (permiso === 'autenticado') {
           next();
