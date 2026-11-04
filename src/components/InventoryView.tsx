@@ -24,7 +24,7 @@ import type {
 import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
-import { useSondeo } from '../lib/sondeo';
+import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
 import { ConjuntoEquipo } from './ConjuntoEquipo';
 import { EditarEquipo } from './EditarEquipo';
@@ -101,7 +101,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<ErrorApi | null>(null);
-  const [seleccionado, setSeleccionado] = useState<EquipoConMotivos | null>(null);
+  /**
+   * La ficha abierta, por ID. El ID manda: la ficha existe mientras haya ID,
+   * sin depender de que el equipo siga en la página o en el filtro tras un
+   * refresco. `ficha` es la última copia conocida de ese equipo, solo para
+   * pintarlo; se pone al día sola únicamente cuando no se está editando.
+   */
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  const [ficha, setFicha] = useState<EquipoConMotivos | null>(null);
+  /** «Editar datos» abierto: pausa el sondeo y congela la copia de la ficha. */
+  const [editandoFicha, setEditandoFicha] = useState(false);
+  const editandoRef = useRef(false);
+  editandoRef.current = editandoFicha;
+
+  const abrirFicha = (e: EquipoConMotivos) => {
+    setSeleccionadoId(e.id);
+    setFicha(e);
+    setEditandoFicha(false);
+  };
+  const cerrarFicha = () => {
+    setSeleccionadoId(null);
+    setFicha(null);
+    setEditandoFicha(false);
+  };
 
   /**
    * El cierre en bloque del motivo filtrado.
@@ -154,13 +176,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       if ('conteos' in datos) setConteos(datos.conteos as ConteoMotivo[]);
       setConteosEmpresa(datos.conteos_empresa);
       setError(null);
-      // La ficha abierta se pone al día solo si de verdad cambió: así no se
-      // reinicia lo que se está escribiendo en ella por un tic sin novedades.
-      setSeleccionado((sel) => {
-        if (!sel) return sel;
-        const nueva = datos.filas.find((f) => f.id === sel.id);
-        return nueva && nueva.updated_at !== sel.updated_at ? nueva : sel;
-      });
+      // La ficha abierta se pone al día solo si de verdad cambió y nadie la
+      // está editando. Si el equipo ya no viene en esta página, la ficha
+      // sigue con su copia: el ID es lo que la mantiene abierta, no la lista.
+      if (!editandoRef.current) {
+        setFicha((f) => {
+          if (!f) return f;
+          const nueva = datos.filas.find((x) => x.id === f.id);
+          return nueva && nueva.updated_at !== f.updated_at ? nueva : f;
+        });
+      }
     } catch (e) {
       if (silencioso || pedido !== ultimoPedido.current) return;
       setError(e instanceof ErrorApi ? e : new ErrorApi(0, 'Error desconocido'));
@@ -171,7 +196,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, pagina]);
 
-  useSondeo(() => cargar({ silencioso: true }));
+  // En pausa mientras se editan los datos de un equipo: nada se refresca
+  // debajo de un formulario a medio escribir.
+  useSondeo(() => cargar({ silencioso: true }), INTERVALO_SONDEO_MS, !editandoFicha);
 
   const cerrarBloque = async () => {
     if (!motivo || !enBloque) return;
@@ -590,7 +617,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 {filas.map((e) => (
                   <tr
                     key={e.id}
-                    onClick={() => setSeleccionado(e)}
+                    onClick={() => abrirFicha(e)}
                     className="hover:bg-surface-alt cursor-pointer"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-brand">{e.etiqueta ?? '—'}</td>
@@ -700,16 +727,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       )}
 
-      {seleccionado && (
+      {seleccionadoId && ficha && ficha.id === seleccionadoId && (
         <Detalle
-          equipo={seleccionado}
-          sede={nombreSede(seleccionado.sede_id)}
-          onCerrar={() => setSeleccionado(null)}
+          // Por ID: cambiar de equipo empieza la ficha de cero (sin «Editar
+          // datos» heredado); refrescar el mismo equipo no la vuelve a montar.
+          key={seleccionadoId}
+          equipo={ficha}
+          sede={nombreSede(ficha.sede_id)}
+          editando={editandoFicha}
+          onEditando={setEditandoFicha}
+          onCerrar={cerrarFicha}
           onAbrir={(id) => {
             // Un enlace del conjunto: abre la ficha de esa parte (o de su
             // computador) en el mismo panel.
             api.equipo(id).then(
-              (r) => setSeleccionado(r.equipo),
+              (r) => abrirFicha(r.equipo),
               () => undefined,
             );
           }}
@@ -717,7 +749,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             // El detalle se queda abierto con el equipo ya cambiado: encadenar
             // dos operaciones —reservar y luego asignar— es lo normal, y
             // cerrar el panel obligaría a volver a buscarlo.
-            setSeleccionado(actualizado);
+            setFicha(actualizado);
             void cargar();
             onEquipoMutado?.();
           }}
@@ -812,35 +844,22 @@ const Detalle: React.FC<{
   onMutado: (equipo: EquipoConMotivos) => void;
   /** 0024. Abrir otra ficha desde el conjunto. */
   onAbrir: (id: string) => void;
-}> = ({ equipo, sede, onCerrar, onMutado, onAbrir }) => {
-  const [editando, setEditando] = useState(false);
+  /** «Editar datos» abierto. Vive arriba: mientras dure, el sondeo se pausa. */
+  editando: boolean;
+  onEditando: (editando: boolean) => void;
+}> = ({ equipo, sede, onCerrar, onMutado, onAbrir, editando, onEditando }) => {
+  const setEditando = onEditando;
 
   /**
-   * Si el clic EMPEZÓ en el fondo. Sin esto, seleccionar el texto de un campo
-   * arrastrando el ratón y soltarlo fuera del panel cerraba la ficha: el
-   * navegador manda el `click` al ancestro común —el fondo— y se perdía lo que
-   * se estaba editando. Pasaba «a veces»: solo cuando el arrastre salía del panel.
+   * El fondo NO cierra la ficha: solo la ✕. Cerraba con un clic en el fondo y
+   * eso la cerraba sin querer con dos gestos normales: volver a la ventana del
+   * navegador haciendo clic en la zona gris, y seleccionar texto arrastrando y
+   * soltar fuera del panel (el `click` llega al ancestro común, el fondo). Se
+   * perdía lo escrito y el clic siguiente abría otro equipo de la tabla.
    */
-  const pulsadoEnFondo = useRef(false);
-
   return (
-    <div
-      className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4"
-      onMouseDown={(e) => {
-        pulsadoEnFondo.current = e.target === e.currentTarget;
-      }}
-      onClick={(e) => {
-        const enElFondo = pulsadoEnFondo.current && e.target === e.currentTarget;
-        pulsadoEnFondo.current = false;
-        // Editando, el fondo no cierra: hay cambios sin guardar, y se sale con
-        // «Cancelar» o la ✕, que sí dicen lo que hacen.
-        if (enElFondo && !editando) onCerrar();
-      }}
-    >
-      <div
-        className="bg-surface border border-line rounded-xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4">
+      <div className="bg-surface border border-line rounded-xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-ink">{nombreDe(equipo)}</h2>

@@ -22,15 +22,22 @@ export const INTERVALO_SONDEO_MS = 10_000;
 export function useSondeo(
   refrescar: () => Promise<unknown> | void,
   intervaloMs: number = INTERVALO_SONDEO_MS,
+  /**
+   * `false` lo pausa sin desmontar nada: el tic se salta. Para cuando alguien
+   * está editando y un refresco no debe tocar lo que tiene delante.
+   */
+  activo: boolean = true,
 ): void {
   const actual = useRef(refrescar);
   actual.current = refrescar;
+  const encendido = useRef(activo);
+  encendido.current = activo;
 
   useEffect(() => {
     let enCurso = false;
 
     const tic = async () => {
-      if (document.visibilityState !== 'visible' || enCurso) return;
+      if (!encendido.current || document.visibilityState !== 'visible' || enCurso) return;
       enCurso = true;
       try {
         await actual.current();

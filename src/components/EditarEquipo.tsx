@@ -70,7 +70,13 @@ export const EditarEquipo: React.FC<{
   onCancelar: () => void;
   onGuardado: (equipo: EquipoConMotivos) => void;
 }> = ({ equipo, onCancelar, onGuardado }) => {
-  const [datos, setDatos] = useState<Datos>(() => desde(equipo));
+  /**
+   * Los valores con que se abrió el formulario. Son la base de «qué cambió», y
+   * no el `equipo` que llegue después: si la ficha se pusiera al día mientras
+   * se escribe, comparar contra la copia nueva mandaría cambios que nadie hizo.
+   */
+  const [base] = useState<Datos>(() => desde(equipo));
+  const [datos, setDatos] = useState<Datos>(base);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,7 +93,7 @@ export const EditarEquipo: React.FC<{
 
   /** Solo lo que cambió, con las cadenas vacías como NULL. */
   const cambios = (): CambiosEquipo => {
-    const antes = desde(equipo);
+    const antes = base;
     const final: Datos = esComputo ? { ...datos, condicion: '' } : datos;
     const salida: Record<string, unknown> = {};
     for (const clave of Object.keys(final) as (keyof Datos)[]) {
