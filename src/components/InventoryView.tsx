@@ -815,10 +815,27 @@ const Detalle: React.FC<{
 }> = ({ equipo, sede, onCerrar, onMutado, onAbrir }) => {
   const [editando, setEditando] = useState(false);
 
+  /**
+   * Si el clic EMPEZÓ en el fondo. Sin esto, seleccionar el texto de un campo
+   * arrastrando el ratón y soltarlo fuera del panel cerraba la ficha: el
+   * navegador manda el `click` al ancestro común —el fondo— y se perdía lo que
+   * se estaba editando. Pasaba «a veces»: solo cuando el arrastre salía del panel.
+   */
+  const pulsadoEnFondo = useRef(false);
+
   return (
     <div
       className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4"
-      onClick={onCerrar}
+      onMouseDown={(e) => {
+        pulsadoEnFondo.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const enElFondo = pulsadoEnFondo.current && e.target === e.currentTarget;
+        pulsadoEnFondo.current = false;
+        // Editando, el fondo no cierra: hay cambios sin guardar, y se sale con
+        // «Cancelar» o la ✕, que sí dicen lo que hacen.
+        if (enElFondo && !editando) onCerrar();
+      }}
     >
       <div
         className="bg-surface border border-line rounded-xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto"
