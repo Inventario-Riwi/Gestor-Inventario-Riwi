@@ -52,6 +52,7 @@ const CAMPOS_PUBLICOS = {
   modelo: equipos.modelo,
   serial: equipos.serial,
   serial_cargador: equipos.serial_cargador,
+  imei: equipos.imei,
   propiedad: equipos.propiedad,
   sistema_operativo: equipos.sistema_operativo,
   licencia_tipo: equipos.licencia_tipo,
@@ -764,13 +765,57 @@ export async function porId(id: string, bd: BD = db) {
  * existe para saber quién hizo qué, y un alta sin autor es justo lo que la
  * columna `NOT NULL` está impidiendo.
  */
+export interface AccesorioNuevo {
+  categoria: 'Monitor' | 'Teclado' | 'Mouse';
+  etiqueta?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  serial?: string | null;
+}
+
+/**
+ * `accesorios`: lo que viene con un equipo de mesa (pantalla, teclado,
+ * mouse). Entran en la MISMA transacción que el desktop —o todos o ninguno: un
+ * serial repetido en el mouse no deja un desktop huérfano a medio registrar— y
+ * cada uno con su propio `Alta`, porque §F lo exige de todo equipo.
+ *
+ * Heredan del desktop dónde está, con quién y de quién es: vienen atados a él.
+ * El vínculo (`equipo_principal_id`, 0024) es informativo, igual que en los
+ * CE: mover luego el desktop no mueve sus partes.
+ */
 export async function crear(
   datos: typeof equipos.$inferInsert,
   contexto: ContextoEscritura,
+  accesorios: AccesorioNuevo[] = [],
   bd: BD = db,
 ) {
   return bd.transaction(async (tx) => {
-    const [fila] = await tx.insert(equipos).values(datos).returning(CAMPOS_PUBLICOS);
+    const fila = await insertarConAlta(tx, datos, contexto);
+    for (const a of accesorios) {
+      await insertarConAlta(
+        tx,
+        {
+          ...a,
+          estado: fila.estado,
+          sede_id: fila.sede_id,
+          empleado_id: fila.empleado_id,
+          empresa: fila.empresa,
+          propiedad: fila.propiedad,
+          equipo_principal_id: fila.id,
+        },
+        contexto,
+      );
+    }
+    return fila;
+  });
+}
+
+async function insertarConAlta(
+  tx: Parameters<Parameters<BD['transaction']>[0]>[0],
+  datos: typeof equipos.$inferInsert,
+  contexto: ContextoEscritura,
+) {
+  const [fila] = await tx.insert(equipos).values(datos).returning(CAMPOS_PUBLICOS);
 
     await tx.insert(movimientos).values({
       equipo_id: fila.id,
@@ -800,7 +845,6 @@ export async function crear(
     );
 
     return fila;
-  });
 }
 
 export async function actualizar(

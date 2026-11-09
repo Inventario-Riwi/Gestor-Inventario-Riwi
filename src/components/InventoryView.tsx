@@ -22,6 +22,7 @@ import type {
   Sede,
 } from '../types';
 import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
+import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
@@ -909,21 +910,27 @@ const Detalle: React.FC<{
                 ['Categoría', equipo.categoria],
                 ['Estado', equipo.estado],
                 ['Serial', equipo.serial],
+                ['IMEI', equipo.imei, 'imei'],
                 ['Marca', equipo.marca],
                 ['Modelo', equipo.modelo],
+                ['Serial del cargador', equipo.serial_cargador, 'serial_cargador'],
                 ['Sede', sede],
                 ['Empresa', etiquetaEmpresa(equipo.empresa)],
                 ['Prestado a', equipo.prestado_a && etiquetaEmpresa(equipo.prestado_a)],
                 ['Propiedad', equipo.propiedad],
-                ['Sistema operativo', equipo.sistema_operativo],
-                ['Licencia', equipo.licencia_tipo],
-                ['Procesador', equipo.procesador],
-                ['RAM', conGB(equipo.ram)],
-                ['Disco', conGB(equipo.disco)],
-                ['Pantalla', equipo.tamano_pantalla],
+                ['Sistema operativo', equipo.sistema_operativo, 'sistema_operativo'],
+                ['Licencia', equipo.licencia_tipo, 'licencia_tipo'],
+                ['Procesador', equipo.procesador, 'procesador'],
+                ['RAM', conGB(equipo.ram), 'ram'],
+                [etiquetaDisco(tipoDe(equipo.categoria)), conGB(equipo.disco), 'disco'],
+                ['Pantalla', equipo.tamano_pantalla, 'tamano_pantalla'],
                 ['Condición', equipo.condicion],
-              ] as const
-            ).map(([etiqueta, valor]) => (
+              ] as [string, string | null | undefined, CampoTecnico?][]
+            )
+              // Lo técnico solo si el tipo lo lleva (lib/tipos-equipo.ts), o si
+              // tiene un valor: un dato que ya está no se esconde por el tipo.
+              .filter(([, valor, campo]) => !campo || valor || TIPOS[tipoDe(equipo.categoria)].campos.includes(campo))
+              .map(([etiqueta, valor]) => (
               <div key={etiqueta}>
                 <dt className="text-xs text-ink-muted">{etiqueta}</dt>
                 <dd className="text-ink">{valor ?? '—'}</dd>

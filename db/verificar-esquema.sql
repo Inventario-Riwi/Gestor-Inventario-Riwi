@@ -185,6 +185,84 @@ BEGIN
     END;
   END;
 
+  -- 3i. 0026: el IMEI. Escrito desde la decisión (formulario por tipo, IMEI
+  -- solo en celulares y tablets, 15 dígitos, único como el serial), no desde
+  -- la constraint. Por los dos lados: lo que entra y lo que no.
+  DECLARE
+    v_cel uuid;
+    v_tab uuid;
+  BEGIN
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei)
+        VALUES ('Celular', 'Disponible', '990000000000011') RETURNING id INTO v_cel;
+      INSERT INTO resultado VALUES ('0026: celular con IMEI de 15 dígitos', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation OR unique_violation THEN
+      INSERT INTO resultado VALUES ('0026: celular con IMEI de 15 dígitos', 'aceptado', 'RECHAZADO');
+    END;
+
+    -- `Tablet` entra al enum en la misma migración; aquí se usa ya comitida.
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei)
+        VALUES ('Tablet', 'Disponible', '990000000000029') RETURNING id INTO v_tab;
+      INSERT INTO resultado VALUES ('0026: tablet con IMEI', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation OR unique_violation OR invalid_text_representation THEN
+      INSERT INTO resultado VALUES ('0026: tablet con IMEI', 'aceptado', 'RECHAZADO');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado) VALUES ('Tablet', 'Disponible');
+      INSERT INTO resultado VALUES ('0026: tablet solo wifi, sin IMEI', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation OR invalid_text_representation THEN
+      INSERT INTO resultado VALUES ('0026: tablet solo wifi, sin IMEI', 'aceptado', 'RECHAZADO');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei) VALUES ('Celular', 'Disponible', '99000000000');
+      INSERT INTO resultado VALUES ('0026: IMEI de 11 dígitos', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0026: IMEI de 11 dígitos', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei) VALUES ('Celular', 'Disponible', '99000-000000003');
+      INSERT INTO resultado VALUES ('0026: IMEI con guion', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0026: IMEI con guion', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei) VALUES ('Portátil', 'Disponible', '990000000000037');
+      INSERT INTO resultado VALUES ('0026: portátil con IMEI', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0026: portátil con IMEI', 'rechazado', 'rechazado');
+    END;
+
+    -- Cambiar de categoría no es una puerta trasera.
+    BEGIN
+      UPDATE equipos SET categoria = 'Mouse' WHERE id = v_cel;
+      INSERT INTO resultado VALUES ('0026: celular con IMEI pasa a mouse', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0026: celular con IMEI pasa a mouse', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei) VALUES ('Celular', 'Disponible', '990000000000011');
+      INSERT INTO resultado VALUES ('0026: IMEI repetido sin marcar', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN unique_violation THEN
+      INSERT INTO resultado VALUES ('0026: IMEI repetido sin marcar', 'rechazado', 'rechazado');
+    END;
+
+    -- Como el serial: marcada para revisión, la fila queda fuera del índice.
+    BEGIN
+      INSERT INTO equipos (categoria, estado, imei, requiere_revision)
+        VALUES ('Celular', 'Disponible', '990000000000011', true) RETURNING id INTO v_cel;
+      INSERT INTO equipos_motivos_revision (equipo_id, motivo_codigo) VALUES (v_cel, 'SIN_SERIAL');
+      INSERT INTO resultado VALUES ('0026: IMEI repetido marcado', 'aceptado', 'aceptado');
+    EXCEPTION WHEN unique_violation THEN
+      INSERT INTO resultado VALUES ('0026: IMEI repetido marcado', 'aceptado', 'RECHAZADO');
+    END;
+  END;
+
   -- 3f. 0022: el país de un remoto es lista cerrada; departamento y ciudad no.
   BEGIN
     INSERT INTO empleados (nombre, pais, departamento, ciudad)

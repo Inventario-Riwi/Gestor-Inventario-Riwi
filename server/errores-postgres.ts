@@ -58,6 +58,7 @@ const NOMBRE_TABLA: Record<string, string> = {
 const NOMBRE_COLUMNA: Record<string, string> = {
   serial: 'el serial',
   etiqueta: 'la etiqueta',
+  imei: 'el IMEI',
   email: 'el correo',
   cedula: 'la cédula',
   nombre: 'el nombre',
@@ -98,6 +99,8 @@ const REGLAS: Record<string, string> = {
     'Ya hay un acta emitida sobre esa entrega. Un movimiento se firma una vez: dos actas sobre la misma operación son dos papeles con distinto número, y el día que discrepen no habría forma de saber cuál vale.',
   actas_equipos_movimiento_del_mismo_equipo:
     'El movimiento indicado no es de ese equipo. Un acta solo puede documentar la operación del equipo que incluye.',
+  equipos_imei_formato: 'El IMEI son exactamente 15 dígitos.',
+  equipos_imei_solo_moviles: 'Solo los celulares y las tablets llevan IMEI.',
   actas_consecutivo_positivo: 'El consecutivo de actas no puede ser cero ni negativo.',
 };
 

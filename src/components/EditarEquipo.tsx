@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { etiquetaEmpresa } from '../lib/empresas';
+import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 
 /**
  * Editar los datos de un equipo desde su ficha.
@@ -18,6 +19,10 @@ import { etiquetaEmpresa } from '../lib/empresas';
  * operación (Asignar, Trasladar…), que es lo que deja el movimiento en el
  * historial (D19); la clave BIOS y la de licencia van cifradas y tienen su
  * acceso aparte (§5.2); las notas tienen su propio editor (`NotasEquipo`).
+ *
+ * Los campos técnicos dependen del tipo (`lib/tipos-equipo.ts`, el mismo
+ * catálogo que el alta): un celular no ofrece procesador ni licencia. Lo que
+ * el tipo no muestra no se toca: sigue en la base como estuviera.
  *
  * Solo se manda lo que cambió: el servidor audita campo a campo, y mandar la
  * ficha entera registraría veinte columnas idénticas por tocar una.
@@ -30,6 +35,7 @@ type Texto =
   | 'modelo'
   | 'serial'
   | 'serial_cargador'
+  | 'imei'
   | 'sistema_operativo'
   | 'procesador'
   | 'ram'
@@ -53,6 +59,7 @@ const desde = (e: EquipoConMotivos): Datos => ({
   modelo: e.modelo ?? '',
   serial: e.serial ?? '',
   serial_cargador: e.serial_cargador ?? '',
+  imei: e.imei ?? '',
   empresa: e.empresa,
   propiedad: e.propiedad,
   sistema_operativo: e.sistema_operativo ?? '',
@@ -90,6 +97,8 @@ export const EditarEquipo: React.FC<{
    * categoría a una de esas, la condición que hubiera se vacía.
    */
   const esComputo = datos.categoria === 'Portátil' || datos.categoria === 'Desktop';
+  const tipo = tipoDe(datos.categoria);
+  const lleva = (c: CampoTecnico) => TIPOS[tipo].campos.includes(c);
 
   /** Solo lo que cambió, con las cadenas vacías como NULL. */
   const cambios = (): CambiosEquipo => {
@@ -97,7 +106,9 @@ export const EditarEquipo: React.FC<{
     const final: Datos = esComputo ? { ...datos, condicion: '' } : datos;
     const salida: Record<string, unknown> = {};
     for (const clave of Object.keys(final) as (keyof Datos)[]) {
-      const ahora = typeof final[clave] === 'string' ? (final[clave] as string).trim() : final[clave];
+      let ahora = typeof final[clave] === 'string' ? (final[clave] as string).trim() : final[clave];
+      // El IMEI se teclea como venga en la caja; se guardan solo los dígitos.
+      if (clave === 'imei') ahora = (ahora as string).replace(/[\s-]/g, '');
       const previo = typeof antes[clave] === 'string' ? (antes[clave] as string).trim() : antes[clave];
       if (ahora !== previo) salida[clave] = ahora === '' ? null : ahora;
     }
@@ -167,19 +178,20 @@ export const EditarEquipo: React.FC<{
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {lista('Categoría', 'categoria', CATEGORIAS_EQUIPO)}
         {texto('Etiqueta', 'etiqueta')}
-        {texto('Nombre del equipo', 'nombre_equipo')}
+        {lleva('nombre_equipo') && texto('Nombre del equipo', 'nombre_equipo')}
         {texto('Serial', 'serial')}
-        {texto('Marca', 'marca')}
-        {texto('Modelo', 'modelo')}
-        {texto('Serial del cargador', 'serial_cargador')}
+        {lleva('marca') && texto('Marca', 'marca')}
+        {lleva('modelo') && texto('Modelo', 'modelo')}
+        {lleva('serial_cargador') && texto('Serial del cargador', 'serial_cargador')}
+        {lleva('imei') && texto('IMEI', 'imei', '15 dígitos')}
         {lista('Empresa', 'empresa', EMPRESAS)}
         {lista('Propiedad', 'propiedad', PROPIEDADES_EQUIPO)}
-        {texto('Sistema operativo', 'sistema_operativo')}
-        {lista('Licencia', 'licencia_tipo', TIPOS_LICENCIA, true)}
-        {texto('Procesador', 'procesador')}
-        {texto('RAM', 'ram', 'p. ej. 16 GB')}
-        {texto('Disco', 'disco', 'p. ej. 512 GB')}
-        {texto('Pantalla', 'tamano_pantalla', 'p. ej. 14"')}
+        {lleva('sistema_operativo') && texto('Sistema operativo', 'sistema_operativo')}
+        {lleva('licencia_tipo') && lista('Licencia', 'licencia_tipo', TIPOS_LICENCIA, true)}
+        {lleva('procesador') && texto('Procesador', 'procesador')}
+        {lleva('ram') && texto('RAM', 'ram', 'p. ej. 16 GB')}
+        {lleva('disco') && texto(etiquetaDisco(tipo), 'disco', 'p. ej. 512 GB')}
+        {lleva('tamano_pantalla') && texto('Pantalla', 'tamano_pantalla', 'p. ej. 14"')}
         {!esComputo && lista('Condición', 'condicion', CONDICIONES_EQUIPO, true)}
         {texto('Costo (COP)', 'costo', 'p. ej. 3500000')}
       </div>

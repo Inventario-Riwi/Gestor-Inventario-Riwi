@@ -40,6 +40,17 @@ const camposEquipo = z.object({
   modelo: z.string().trim().max(120).nullable().optional(),
   serial: z.string().trim().max(120).nullable().optional(),
   serial_cargador: z.string().trim().max(120).nullable().optional(),
+  /**
+   * 0026. Solo celulares y tablets. Se aceptan espacios y guiones al
+   * teclearlo y se guardan solo los 15 dígitos: la CHECK de la base no los
+   * admite, y un IMEI copiado de la caja suele venir partido en bloques.
+   */
+  imei: z
+    .string()
+    .transform((v) => v.replace(/[\s-]/g, ''))
+    .pipe(z.string().regex(/^\d{15}$/, { message: 'el IMEI son 15 dígitos' }))
+    .nullable()
+    .optional(),
   propiedad: z.enum(propiedadEquipo.enumValues).optional(),
   sistema_operativo: z.string().trim().max(120).nullable().optional(),
   licencia_tipo: z.enum(licenciaTipo.enumValues).nullable().optional(),
@@ -81,7 +92,35 @@ const camposEquipo = z.object({
     .optional(),
 });
 
-const esquemaCrear = camposEquipo;
+/**
+ * Lo que viene con un equipo de mesa: su pantalla, su teclado, su mouse.
+ *
+ * Cada uno es un equipo propio —tiene serial o etiqueta y se puede perder por
+ * separado—, ligado al desktop por `equipo_principal_id` (0024). Sin detalle
+ * técnico: qué es, marca, modelo y cómo identificarlo.
+ *
+ * Serial o etiqueta, al menos uno: `verificar-datos.sql` §B exige que todo
+ * activo se pueda señalar, y un accesorio sin ninguno de los dos entraría sin
+ * marca de revisión. Mejor no dejarlo entrar.
+ */
+const accesorio = z
+  .object({
+    categoria: z.enum(['Monitor', 'Teclado', 'Mouse']),
+    etiqueta: z.string().trim().min(1).max(60).nullable().optional(),
+    marca: z.string().trim().max(80).nullable().optional(),
+    modelo: z.string().trim().max(120).nullable().optional(),
+    serial: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .refine((a) => !!a.serial || !!a.etiqueta, {
+    message: 'cada accesorio necesita serial o etiqueta',
+  });
+
+const esquemaCrear = camposEquipo
+  .extend({ accesorios: z.array(accesorio).max(6).optional() })
+  .refine((d) => !d.accesorios?.length || d.categoria === 'Desktop', {
+    message: 'solo un equipo de mesa (Desktop) se registra con accesorios',
+    path: ['accesorios'],
+  });
 
 /**
  * El `PATCH` edita la **ficha**, no la situación del equipo.
@@ -331,14 +370,14 @@ export function registrarRutasEquipos(app: Express): void {
     'autenticado',
     guardian,
     asincrono(async (req, res) => {
-      const datos = validar(esquemaCrear, req.body);
+      const { accesorios, ...datos } = validar(esquemaCrear, req.body);
       // `guardian` ya rechazó la petición sin sesión, pero el tipo no lo sabe.
       // Si alguna vez dejara de hacerlo, esto falla aquí y no escribe un
       // movimiento sin autor.
       const usuarioId = req.usuario?.id;
       if (!usuarioId) throw new ErrorHttp(401, 'Sesión requerida');
       res.status(201).json({
-        equipo: await repoEquipos.crear(datos, { usuarioId, ip: req.ip ?? null }),
+        equipo: await repoEquipos.crear(datos, { usuarioId, ip: req.ip ?? null }, accesorios),
       });
     }),
   );

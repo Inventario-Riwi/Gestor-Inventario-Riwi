@@ -136,6 +136,18 @@ export interface NuevoEquipo {
   marca?: string | null;
   modelo?: string | null;
   serial?: string | null;
+  serial_cargador?: string | null;
+  /** 0026. Solo celulares y tablets: 15 dígitos. */
+  imei?: string | null;
+  sistema_operativo?: string | null;
+  licencia_tipo?: TipoLicencia | null;
+  tamano_pantalla?: string | null;
+  condicion?: CondicionEquipo | null;
+  /**
+   * Solo para un `Desktop`: su pantalla, teclado y mouse. Entran como equipos
+   * propios ligados a él, en la misma transacción. Cada uno con serial o etiqueta.
+   */
+  accesorios?: AccesorioNuevo[];
   procesador?: string | null;
   disco?: string | null;
   ram?: string | null;
@@ -159,6 +171,15 @@ export interface NuevoEquipo {
    * que no eran personas. Ver `NotasEquipo`.
    */
   notas?: string | null;
+}
+
+/** Lo que viene con un equipo de mesa. Ver `accesorio` en `server/rutas/equipos.ts`. */
+export interface AccesorioNuevo {
+  categoria: 'Monitor' | 'Teclado' | 'Mouse';
+  etiqueta?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  serial?: string | null;
 }
 
 /**
@@ -555,6 +576,8 @@ export interface CambiosEquipo {
   modelo?: string | null;
   serial?: string | null;
   serial_cargador?: string | null;
+  /** 0026. Solo celulares y tablets. */
+  imei?: string | null;
   empresa?: Empresa;
   propiedad?: PropiedadEquipo;
   sistema_operativo?: string | null;
@@ -623,6 +646,7 @@ export const CATEGORIAS_EQUIPO = [
   'Diadema',
   'Celular',
   'Otro',
+  'Tablet',
 ] as const;
 
 /**

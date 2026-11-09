@@ -77,6 +77,8 @@ export const categoriaEquipo = pgEnum('categoria_equipo', [
   'Diadema',
   'Celular',
   'Otro',
+  /** 0026. */
+  'Tablet',
 ]);
 
 export const propiedadEquipo = pgEnum('propiedad_equipo', ['Empresa', 'Cliente', 'Empleado']);
@@ -401,6 +403,8 @@ export const equipos = pgTable(
     modelo: text('modelo'),
     serial: text('serial'),
     serial_cargador: text('serial_cargador'),
+    /** 0026. Solo celulares y tablets; 15 dígitos; único entre las filas limpias. */
+    imei: text('imei'),
     propiedad: propiedadEquipo('propiedad').notNull().default('Empresa'),
     sistema_operativo: text('sistema_operativo'),
     licencia_tipo: licenciaTipo('licencia_tipo'),
@@ -502,6 +506,15 @@ export const equipos = pgTable(
       'equipos_principal_no_es_si_mismo',
       sql`equipo_principal_id IS NULL OR equipo_principal_id <> id`,
     ),
+    // 0026. El cast a texto es porque 'Tablet' entra al enum en la misma migración.
+    check('equipos_imei_formato', sql`imei IS NULL OR imei ~ '^[0-9]{15}$'`),
+    check(
+      'equipos_imei_solo_moviles',
+      sql`imei IS NULL OR categoria::text IN ('Celular', 'Tablet')`,
+    ),
+    uniqueIndex('equipos_imei_uk')
+      .on(t.imei)
+      .where(sql`imei IS NOT NULL AND requiere_revision = false`),
     index('idx_equipos_principal')
       .on(t.equipo_principal_id)
       .where(sql`equipo_principal_id IS NOT NULL`),

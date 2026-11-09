@@ -1193,3 +1193,213 @@ describe('CE: el conjunto del puesto, el filtro y la búsqueda por sala', () => 
     assert.ok(!ids.includes(suelto), 'trajo un equipo de otra sala');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 0026: formulario por tipo. El IMEI y el equipo de mesa con sus accesorios.
+// ---------------------------------------------------------------------------
+//
+// Escritos desde la decisión, no desde el código: IMEI solo en celulares y
+// tablets, 15 dígitos, único; un equipo de mesa se registra con su pantalla,
+// teclado y mouse como equipos propios ligados a él, todo o nada.
+
+describe('alta por tipo: IMEI y equipo de mesa con accesorios (0026)', () => {
+  const suite = ambito('tipos');
+  let admin: UsuarioDePrueba;
+  let sede: string;
+  let persona: string;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    sede = await primeraSede();
+    persona = await crearEmpleado(`${suite.prefijo}Persona Mesa`);
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await borrarEmpleados([persona]);
+    await suite.limpiar();
+  });
+
+  /** IMEI sintético y distinto en cada corrida: la base de tests acumula si una limpieza falla. */
+  const imei = () =>
+    `99${String(Date.now()).slice(-10)}${String(Math.floor(Math.random() * 900) + 100)}`;
+
+  it('un celular guarda su IMEI, solo los dígitos aunque llegue partido', async () => {
+    const limpio = imei();
+    const partido = `${limpio.slice(0, 2)} ${limpio.slice(2, 8)}-${limpio.slice(8)}`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Celular',
+      etiqueta: `${suite.prefijo}CEL1`,
+      imei: partido,
+      estado: 'Disponible',
+    });
+    assert.equal(r.estado, 201);
+    const { equipo } = r.cuerpo as { equipo: { id: string; imei: string } };
+    creados.push(equipo.id);
+    assert.equal(equipo.imei, limpio);
+  });
+
+  it('una tablet es una categoría y puede ir sin IMEI (solo wifi)', async () => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Tablet',
+      etiqueta: `${suite.prefijo}TAB1`,
+      estado: 'Disponible',
+    });
+    assert.equal(r.estado, 201);
+    creados.push((r.cuerpo as { equipo: { id: string } }).equipo.id);
+  });
+
+  it('un IMEI que no son 15 dígitos es 400 y no entra', async () => {
+    const etiqueta = `${suite.prefijo}CEL-MAL`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Celular',
+      etiqueta,
+      imei: '12345',
+      estado: 'Disponible',
+    });
+    assert.equal(r.estado, 400);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('un portátil con IMEI es 409 con la regla dicha en español', async () => {
+    const etiqueta = `${suite.prefijo}PORT-IMEI`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta,
+      imei: imei(),
+      estado: 'Disponible',
+    });
+    assert.equal(r.estado, 409);
+    assert.match(JSON.stringify(r.cuerpo), /celulares y las tablets/);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('un IMEI repetido es 409 y nombra el IMEI', async () => {
+    const repetido = imei();
+    const a = await c.post('/api/equipos', {
+      categoria: 'Celular',
+      etiqueta: `${suite.prefijo}CEL-A`,
+      imei: repetido,
+      estado: 'Disponible',
+    });
+    assert.equal(a.estado, 201);
+    creados.push((a.cuerpo as { equipo: { id: string } }).equipo.id);
+
+    const b = await c.post('/api/equipos', {
+      categoria: 'Celular',
+      etiqueta: `${suite.prefijo}CEL-B`,
+      imei: repetido,
+      estado: 'Disponible',
+    });
+    assert.equal(b.estado, 409);
+    assert.match(JSON.stringify(b.cuerpo), /IMEI/);
+    assert.equal(await contarEquiposConEtiqueta(`${suite.prefijo}CEL-B`), 0);
+  });
+
+  it('el equipo de mesa entra con sus accesorios ligados, cada uno con su Alta y su responsable', async () => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta: `${suite.prefijo}MESA1`,
+      estado: 'Asignado',
+      empleado_id: persona,
+      sede_id: sede,
+      empresa: 'RIWI',
+      accesorios: [
+        { categoria: 'Monitor', etiqueta: `${suite.prefijo}MESA1-MON`, marca: 'Dell' },
+        { categoria: 'Teclado', serial: `SN-${suite.prefijo}MESA1-TEC` },
+        { categoria: 'Mouse', serial: `SN-${suite.prefijo}MESA1-MOU` },
+      ],
+    });
+    assert.equal(r.estado, 201);
+    const mesa = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(mesa);
+
+    const conj = await c.get(`/api/equipos/${mesa}/conjunto`);
+    const partes = (conj.cuerpo as { partes: { id: string; categoria: string }[] }).partes;
+    creados.push(...partes.map((p) => p.id));
+    assert.deepEqual(partes.map((p) => p.categoria).sort(), ['Monitor', 'Mouse', 'Teclado']);
+
+    for (const p of partes) {
+      const ficha = (await c.get(`/api/equipos/${p.id}`)).cuerpo as {
+        equipo: { estado: string; empleado_id: string; sede_id: string; empresa: string };
+      };
+      assert.equal(ficha.equipo.estado, 'Asignado');
+      assert.equal(ficha.equipo.empleado_id, persona, 'el accesorio va con quien tiene el equipo');
+      assert.equal(ficha.equipo.sede_id, sede);
+      assert.equal(ficha.equipo.empresa, 'RIWI');
+      const movs = await movimientosDe(p.id);
+      assert.equal(movs.length, 1);
+      assert.equal(movs[0].tipo, 'Alta');
+    }
+  });
+
+  it('si un accesorio choca, no entra nada: ni el equipo de mesa ni los otros', async () => {
+    const ocupado = `SN-${suite.prefijo}OCUPADO`;
+    const previo = await c.post('/api/equipos', {
+      categoria: 'Mouse',
+      serial: ocupado,
+      estado: 'Disponible',
+    });
+    assert.equal(previo.estado, 201);
+    creados.push((previo.cuerpo as { equipo: { id: string } }).equipo.id);
+
+    const etiqueta = `${suite.prefijo}MESA2`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta,
+      estado: 'Disponible',
+      accesorios: [
+        { categoria: 'Monitor', etiqueta: `${suite.prefijo}MESA2-MON` },
+        { categoria: 'Mouse', serial: ocupado },
+      ],
+    });
+    assert.equal(r.estado, 409);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0, 'quedó el equipo de mesa a medias');
+    assert.equal(await contarEquiposConEtiqueta(`${suite.prefijo}MESA2-MON`), 0, 'quedó el monitor');
+  });
+
+  it('un accesorio sin serial ni etiqueta es 400', async () => {
+    const etiqueta = `${suite.prefijo}MESA3`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta,
+      estado: 'Disponible',
+      accesorios: [{ categoria: 'Teclado', marca: 'Logitech' }],
+    });
+    assert.equal(r.estado, 400);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('solo un equipo de mesa lleva accesorios', async () => {
+    const etiqueta = `${suite.prefijo}PORT-ACC`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta,
+      estado: 'Disponible',
+      accesorios: [{ categoria: 'Mouse', serial: `SN-${suite.prefijo}PORT-ACC-M` }],
+    });
+    assert.equal(r.estado, 400);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('editar: el IMEI se corrige por PATCH y un mouse no puede recibirlo', async () => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Celular',
+      etiqueta: `${suite.prefijo}CEL-ED`,
+      estado: 'Disponible',
+    });
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    const nuevoImei = imei();
+    const ok = await c.patch(`/api/equipos/${id}`, { imei: nuevoImei });
+    assert.equal(ok.estado, 200);
+    assert.equal((ok.cuerpo as { equipo: { imei: string } }).equipo.imei, nuevoImei);
+
+    const malo = await c.patch(`/api/equipos/${id}`, { categoria: 'Mouse' });
+    assert.equal(malo.estado, 409, 'cambiar de categoría no deja un IMEI en un mouse');
+  });
+});
