@@ -27,10 +27,10 @@ import ExcelJS from 'exceljs';
 import { eq, sql } from 'drizzle-orm';
 
 import { cifrar } from './cifrado.js';
+import { esMarcador, norm } from './marcadores.js';
 import {
   HOJAS,
   HOJAS_IGNORADAS,
-  MARCADORES_DEL_FICHERO,
   RUTAS,
   type ColumnasHoja,
   type MapaHoja,
@@ -125,9 +125,7 @@ let ajusteFilasPrueba = 0;
 // Normalización de texto
 // ---------------------------------------------------------------------------
 
-/** minúsculas, sin tildes, espacios colapsados. La llave de matching. */
-const norm = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+// `norm` vive en `marcadores.ts`: la misma llave que usan servidor y formularios.
 
 /**
  * La llave de una CABECERA: espacios colapsados, sin espacios en los bordes y
@@ -141,38 +139,10 @@ const norm = (s: string) =>
  */
 const normCab = (s: string) => s.replace(/\s+/g, ' ').trim().toUpperCase();
 
-/**
- * Marcadores que los Excel usan para decir «aquí no hay dato». Van a NULL.
- *
- * ============================================================================
- * LA MITAD DE ESTA LISTA LA ESCRIBIÓ EL PROPIO FICHERO.
- * ============================================================================
- *
- * `MARCADORES_DEL_FICHERO` sale de la fórmula de `CONTROL DE CALIDAD` (D45):
- * es la lista que quien mantiene el Excel usa para decidir qué no cuenta como
- * serial. Trajo dos que nosotros no teníamos —`Es de Claro` y `Sin rotulo`— y
- * sin ellas entraron como etiquetas literales en la primera pasada.
- *
- * `sin etiqueta` no está en ninguna de las dos listas y lo encontró la carga:
- * `ETIQUETA TECLADO` lo trae en cinco filas de `INV - CE`, y como esa columna
- * solo existe en esa hoja, no salió en la exploración. Cinco teclados con la
- * etiqueta «Sin etiqueta» chocaron contra el UNIQUE, que es exactamente lo que
- * ese índice existe para impedir.
- *
- * `disponible` NO está aquí: es un marcador solo en la columna de la persona, y
- * ahí se trata aparte — en la columna de estado es un valor legítimo.
- */
-const MARCADORES = new Set([
-  ...MARCADORES_DEL_FICHERO.map((m) => norm(m)),
-  'na',
-  'ninguno',
-  'sin asignar',
-  'sin etiqueta',
-  '--',
-  '.',
-]);
+// Los marcadores de ausencia (N/A, No aplica, Sin serial…) viven en
+// `marcadores.ts`, compartidos con el servidor y los formularios: la aplicación
+// tiene que entender «N/A» igual que el importador.
 
-const esMarcador = (s: string) => MARCADORES.has(norm(s));
 
 /** Texto de la celda, o null si está vacía o es un marcador de ausencia. */
 function limpio(s: string): string | null {

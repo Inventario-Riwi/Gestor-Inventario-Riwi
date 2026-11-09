@@ -1727,3 +1727,89 @@ describe('remotos: el equipo sigue a su responsable', () => {
     if (abierto) await c.post(`/api/movimientos/${abierto.id}/confirmar`, {});
   });
 });
+
+// ---------------------------------------------------------------------------
+// «N/A» como serial: se repite, porque no es un serial (marcadores.ts)
+// ---------------------------------------------------------------------------
+//
+// Escrito desde la decisión del usuario: «el serial N/A sí se puede repetir»,
+// guardándolo como sin serial. Por los dos lados: los marcadores se repiten,
+// un serial real repetido sigue rechazándose.
+
+describe('serial «N/A»: es sin serial, y por eso se repite', () => {
+  const suite = ambito('na');
+  let admin: UsuarioDePrueba;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await suite.limpiar();
+  });
+
+  const alta = (etq: string, serial: string, extra: Record<string, unknown> = {}) =>
+    c.post('/api/equipos', {
+      categoria: 'Mouse',
+      etiqueta: `${suite.prefijo}${etq}`,
+      serial,
+      estado: 'Disponible',
+      ...extra,
+    });
+
+  it('dos equipos con serial «N/A» entran, y los dos quedan sin serial', async () => {
+    for (const etq of ['NA1', 'NA2']) {
+      const r = await alta(etq, 'N/A');
+      assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+      const e = (r.cuerpo as { equipo: { id: string; serial: string | null } }).equipo;
+      creados.push(e.id);
+      assert.equal(e.serial, null);
+    }
+  });
+
+  it('las otras formas de decirlo también: «No aplica», «n/a», «Sin serial», «-»', async () => {
+    for (const [i, serial] of ['No aplica', 'n/a', 'Sin serial', '-', ' N/A '].entries()) {
+      const r = await alta(`NAV${i}`, serial);
+      assert.equal(r.estado, 201, `${serial}: ${JSON.stringify(r.cuerpo)}`);
+      const e = (r.cuerpo as { equipo: { id: string; serial: string | null } }).equipo;
+      creados.push(e.id);
+      assert.equal(e.serial, null, `«${serial}» debía quedar sin serial`);
+    }
+  });
+
+  it('un serial real repetido sigue siendo 409 (el otro lado)', async () => {
+    const serial = `SN-${suite.prefijo}REAL`;
+    const a = await alta('REAL1', serial);
+    assert.equal(a.estado, 201);
+    creados.push((a.cuerpo as { equipo: { id: string } }).equipo.id);
+    const b = await alta('REAL2', serial);
+    assert.equal(b.estado, 409);
+    assert.equal(await contarEquiposConEtiqueta(`${suite.prefijo}REAL2`), 0);
+  });
+
+  it('editar el serial a «N/A» lo deja sin serial', async () => {
+    const a = await alta('ED', `SN-${suite.prefijo}ED`);
+    const id = (a.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    const r = await c.patch(`/api/equipos/${id}`, { serial: 'N/A' });
+    assert.equal(r.estado, 200);
+    assert.equal((r.cuerpo as { equipo: { serial: string | null } }).equipo.serial, null);
+  });
+
+  it('un accesorio con serial «N/A» y sin etiqueta no se puede identificar: 400', async () => {
+    const etiqueta = `${suite.prefijo}MESA-NA`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta,
+      estado: 'Disponible',
+      accesorios: [{ categoria: 'Teclado', serial: 'N/A' }],
+    });
+    assert.equal(r.estado, 400);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+});

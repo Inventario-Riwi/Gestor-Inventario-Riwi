@@ -22,6 +22,7 @@ import {
   prestatario,
   propiedadEquipo,
 } from '../../db/esquema.js';
+import { sinMarcador } from '../../db/marcadores.js';
 import { CODIGOS } from '../../db/motivos.js';
 import { guardian } from '../autenticar.js';
 import { asincrono, ErrorHttp, noEncontrado } from '../errores.js';
@@ -32,14 +33,21 @@ const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 });
 
 /** Los valores válidos salen del propio enum de la BD, no de una copia. */
+/** `undefined` se queda `undefined` (no tocar el campo); lo demás, sin marcadores. */
+const sinMarcadorOpcional = (v: string | null | undefined) =>
+  v === undefined ? undefined : sinMarcador(v);
+
 const camposEquipo = z.object({
   categoria: z.enum(categoriaEquipo.enumValues),
   etiqueta: z.string().trim().min(1).max(60).nullable().optional(),
   nombre_equipo: z.string().trim().max(120).nullable().optional(),
   marca: z.string().trim().max(80).nullable().optional(),
   modelo: z.string().trim().max(120).nullable().optional(),
-  serial: z.string().trim().max(120).nullable().optional(),
-  serial_cargador: z.string().trim().max(120).nullable().optional(),
+  // «N/A», «No aplica», «Sin serial»… no son un serial: es que no hay. Se
+  // guardan como NULL —como hace el importador— y así se pueden repetir; como
+  // texto chocaban contra el índice único del primer «N/A» (marcadores.ts).
+  serial: z.string().max(120).nullable().optional().transform(sinMarcadorOpcional),
+  serial_cargador: z.string().max(120).nullable().optional().transform(sinMarcadorOpcional),
   /**
    * 0026. Solo celulares y tablets. Se aceptan espacios y guiones al
    * teclearlo y se guardan solo los 15 dígitos: la CHECK de la base no los
@@ -118,7 +126,7 @@ const accesorio = z
     etiqueta: z.string().trim().min(1).max(60).nullable().optional(),
     marca: z.string().trim().max(80).nullable().optional(),
     modelo: z.string().trim().max(120).nullable().optional(),
-    serial: z.string().trim().min(1).max(120).nullable().optional(),
+    serial: z.string().max(120).nullable().optional().transform(sinMarcadorOpcional),
   })
   .refine((a) => !!a.serial || !!a.etiqueta, {
     message: 'cada accesorio necesita serial o etiqueta',

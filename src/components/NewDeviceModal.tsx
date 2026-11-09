@@ -24,6 +24,7 @@ import { api, ErrorApi } from '../lib/api';
 import { etiquetaEmpresa } from '../lib/empresas';
 import { etiquetaDisco, TIPOS, type Tipo } from '../lib/tipos-equipo';
 import { SIN_GUARDAR, useConfirmacion } from './Confirmacion';
+import { sinMarcador } from '../../db/marcadores';
 
 interface NewDeviceModalProps {
   isOpen: boolean;
@@ -209,14 +210,15 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
   const problema = (): string | null => {
     if (!empresa) return 'Elige de qué empresa es.';
     // verificar-datos.sql §B: todo activo se tiene que poder señalar.
-    if (!datos.serial.trim() && !datos.etiqueta.trim())
+    // «N/A» no identifica nada: cuenta como sin serial (marcadores.ts).
+    if (!sinMarcador(datos.serial) && !datos.etiqueta.trim())
       return 'Hace falta el serial o la etiqueta: sin ninguno de los dos no hay forma de encontrarlo.';
     if (lleva('imei') && datos.imei.trim() && !/^\d{15}$/.test(datos.imei.replace(/[\s-]/g, '')))
       return 'El IMEI son 15 dígitos.';
     if (tipo === 'mesa') {
       if (enSala && !sala.trim()) return 'Escribe el nombre de la sala de entrenamiento.';
       const sinId = accesorios.find(
-        (a) => algo(a) && !a.serial.trim() && !a.etiqueta.trim() && !(a.categoria === 'Mouse' && mouseSinSerial),
+        (a) => algo(a) && !sinMarcador(a.serial) && !a.etiqueta.trim() && !(a.categoria === 'Mouse' && mouseSinSerial),
       );
       if (sinId) return `${sinId.categoria}: hace falta su serial o su etiqueta.`;
     }

@@ -664,19 +664,5 @@ export const HOJAS_IGNORADAS: Record<EmpresaHoja, { nombre: string; porque: stri
  */
 export const COLUMNA_NO_IMPORTABLE = 'CONTROL DE CALIDAD';
 
-/**
- * Lo que el propio Excel considera «aquí no hay dato», sacado de la fórmula de
- * `CONTROL DE CALIDAD` (D45).
- *
- * `Es de Claro` y `Sin rotulo` no estaban en nuestra lista: los trajo el
- * fichero. Sustituyen a la lista que el importador tenía escrita a mano.
- */
-export const MARCADORES_DEL_FICHERO = [
-  'N/A',
-  'No aplica',
-  'No tiene',
-  '-',
-  'Es de Claro',
-  'Sin rotulo',
-  'No',
-];
+/** Vive en `marcadores.ts`, que comparten importador, servidor y formularios. */
+export { MARCADORES_DEL_FICHERO } from './marcadores.js';
