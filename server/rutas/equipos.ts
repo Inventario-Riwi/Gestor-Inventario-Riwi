@@ -75,6 +75,15 @@ const camposEquipo = z.object({
   empresa: z.enum(empresaEmpleado.enumValues).optional(),
   notas: z.string().trim().max(2000).nullable().optional(),
   /**
+   * Salas de entrenamiento. `ubicacion_detalle` es la sala («P3 OCCI»); para
+   * los equipos de infraestructura es el sitio dentro de la sede (D48). No es
+   * la sede: esa se mueve con un traslado y sigue fuera de este esquema.
+   */
+  centro_entrenamiento: z.boolean().optional(),
+  ubicacion_detalle: z.string().trim().max(120).nullable().optional(),
+  /** 0027. El puesto trae mouse, sin serial. Solo Desktop: lo dice la CHECK. */
+  mouse_sin_serial: z.boolean().optional(),
+  /**
    * Pesos colombianos, como cadena: `numeric(14,2)` no cabe en un `number` de
    * JavaScript sin perder precisión, y `pg` lo devuelve como texto por lo
    * mismo. Se valida la forma aquí para que un «12.345,67» no llegue a
@@ -120,6 +129,12 @@ const esquemaCrear = camposEquipo
   .refine((d) => !d.accesorios?.length || d.categoria === 'Desktop', {
     message: 'solo un equipo de mesa (Desktop) se registra con accesorios',
     path: ['accesorios'],
+  })
+  // Un equipo de sala sin sala no aparece en ninguna tarjeta: se perdería
+  // dentro del apartado que existe para encontrarlo.
+  .refine((d) => !d.centro_entrenamiento || !!d.ubicacion_detalle, {
+    message: 'un equipo de sala de entrenamiento necesita el nombre de la sala',
+    path: ['ubicacion_detalle'],
   });
 
 /**
@@ -317,6 +332,44 @@ export function registrarRutasEquipos(app: Express): void {
 
   // `GET /api/equipos/:id/historial` vive en `rutas/movimientos.ts` desde la
   // etapa 5. El de aquí devolvía los UUID a pelo, sin resolver nombres.
+
+  /**
+   * Salas de entrenamiento: una fila por sede y sala, con sus puestos y
+   * cuántos están completos (pantalla, teclado y mouse).
+   */
+  ruta(
+    app,
+    'get',
+    '/api/salas',
+    'autenticado',
+    guardian,
+    asincrono(async (_req, res) => {
+      res.json({ salas: await repoEquipos.salas() });
+    }),
+  );
+
+  /**
+   * Los puestos de una sala con sus partes. Sin `sede_id` o sin `sala` se
+   * piden los que no la tienen escrita: una sala que no se puede abrir sería
+   * una tarjeta que cuenta equipos que nadie ve.
+   */
+  ruta(
+    app,
+    'get',
+    '/api/salas/puestos',
+    'autenticado',
+    guardian,
+    asincrono(async (req, res) => {
+      const f = validar(
+        z.object({
+          sede_id: uuid.optional(),
+          sala: z.string().trim().min(1).max(120).optional(),
+        }),
+        req.query,
+      );
+      res.json({ puestos: await repoEquipos.puestosDeSala(f.sede_id ?? null, f.sala ?? null) });
+    }),
+  );
 
   // 0024. El conjunto del equipo: a qué computador pertenece y qué partes
   // tiene (la pantalla y el teclado de un puesto de CE).

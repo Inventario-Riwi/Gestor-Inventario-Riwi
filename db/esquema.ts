@@ -499,6 +499,8 @@ export const equipos = pgTable(
     ),
     /** 0024. Es de una sala de entrenamiento (CE); la sala va en `ubicacion_detalle`. */
     centro_entrenamiento: boolean('centro_entrenamiento').notNull().default(false),
+    /** 0027. El puesto trae mouse, pero sin serial: no es un equipo propio. Solo Desktop. */
+    mouse_sin_serial: boolean('mouse_sin_serial').notNull().default(false),
   },
   (t) => [
     // 0024. Nadie es parte de sí mismo.
@@ -511,6 +513,10 @@ export const equipos = pgTable(
     check(
       'equipos_imei_solo_moviles',
       sql`imei IS NULL OR categoria::text IN ('Celular', 'Tablet')`,
+    ),
+    check(
+      'equipos_mouse_sin_serial_solo_desktop',
+      sql`NOT mouse_sin_serial OR categoria::text = 'Desktop'`,
     ),
     uniqueIndex('equipos_imei_uk')
       .on(t.imei)

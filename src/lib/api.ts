@@ -30,6 +30,8 @@ import type {
   MovimientoConNombres,
   NuevoEquipo,
   Pagina,
+  PuestoSala,
+  ResumenSala,
   ResumenEquipos,
   Sede,
   SedeConConteos,
@@ -406,6 +408,17 @@ export const api = {
   transiciones: () => pedir<CatalogoTransiciones>('/api/transiciones'),
 
   /** 0024. A qué computador pertenece y qué partes tiene. */
+  /** Salas de entrenamiento: una fila por sede y sala. */
+  salas: () => pedir<{ salas: ResumenSala[] }>('/api/salas'),
+
+  /** Los puestos de una sala. `null` pide los que no tienen sede o sala escrita. */
+  puestosDeSala: (sedeId: string | null, sala: string | null) => {
+    const q = new URLSearchParams();
+    if (sedeId) q.set('sede_id', sedeId);
+    if (sala) q.set('sala', sala);
+    return pedir<{ puestos: PuestoSala[] }>(`/api/salas/puestos?${q}`);
+  },
+
   conjunto: (equipoId: string) =>
     pedir<{ principal: EquipoEnConjunto | null; partes: EquipoEnConjunto[] }>(
       `/api/equipos/${equipoId}/conjunto`,

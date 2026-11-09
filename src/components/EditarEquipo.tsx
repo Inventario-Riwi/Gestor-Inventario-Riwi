@@ -50,6 +50,8 @@ type Datos = Record<Texto, string> & {
   propiedad: EquipoConMotivos['propiedad'];
   licencia_tipo: string;
   condicion: string;
+  /** 0027. Solo Desktop. */
+  mouse_sin_serial: boolean;
 };
 
 const desde = (e: EquipoConMotivos): Datos => ({
@@ -70,6 +72,7 @@ const desde = (e: EquipoConMotivos): Datos => ({
   disco: e.disco ?? '',
   tamano_pantalla: e.tamano_pantalla ?? '',
   condicion: e.condicion ?? '',
+  mouse_sin_serial: e.mouse_sin_serial ?? false,
   costo: e.costo ?? '',
 });
 
@@ -106,7 +109,13 @@ export const EditarEquipo: React.FC<{
   /** Solo lo que cambió, con las cadenas vacías como NULL. */
   const cambios = (): CambiosEquipo => {
     const antes = base;
-    const final: Datos = esComputo ? { ...datos, condicion: '' } : datos;
+    // Un equipo que deja de ser de mesa no puede conservar «trae mouse sin
+    // serial»: la CHECK de la 0027 lo rechazaría.
+    const final: Datos = {
+      ...datos,
+      ...(esComputo ? { condicion: '' } : {}),
+      mouse_sin_serial: datos.categoria === 'Desktop' && datos.mouse_sin_serial,
+    };
     const salida: Record<string, unknown> = {};
     for (const clave of Object.keys(final) as (keyof Datos)[]) {
       let ahora = typeof final[clave] === 'string' ? (final[clave] as string).trim() : final[clave];
@@ -221,6 +230,17 @@ export const EditarEquipo: React.FC<{
         {lleva('tamano_pantalla') && texto('Pantalla', 'tamano_pantalla', 'p. ej. 14"')}
         {!esComputo && lista('Condición', 'condicion', CONDICIONES_EQUIPO, true)}
         {texto('Costo (COP)', 'costo', 'p. ej. 3500000')}
+        {datos.categoria === 'Desktop' && (
+          <label className="text-xs text-ink flex items-center gap-2 col-span-2">
+            <input
+              type="checkbox"
+              checked={datos.mouse_sin_serial}
+              onChange={(e) => poner('mouse_sin_serial', e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-line"
+            />
+            Trae mouse, pero sin serial (si tiene serial, se registra como equipo propio)
+          </label>
+        )}
       </div>
 
       <p className="text-[11px] text-ink-muted">

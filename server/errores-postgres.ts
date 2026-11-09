@@ -101,6 +101,8 @@ const REGLAS: Record<string, string> = {
     'El movimiento indicado no es de ese equipo. Un acta solo puede documentar la operación del equipo que incluye.',
   equipos_imei_formato: 'El IMEI son exactamente 15 dígitos.',
   equipos_imei_solo_moviles: 'Solo los celulares y las tablets llevan IMEI.',
+  equipos_mouse_sin_serial_solo_desktop:
+    'Solo un equipo de mesa lleva la marca de «trae mouse sin serial».',
   actas_consecutivo_positivo: 'El consecutivo de actas no puede ser cero ni negativo.',
 };
 

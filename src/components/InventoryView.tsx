@@ -25,6 +25,7 @@ import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
 import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
+import { SalasEntrenamiento } from './SalasEntrenamiento';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
@@ -56,7 +57,7 @@ interface InventoryViewProps {
   onEquipoMutado?: () => void;
 }
 
-type Pestana = 'todos' | 'revision';
+type Pestana = 'todos' | 'revision' | 'salas';
 
 const colorEstado: Record<EstadoEquipo, string> = {
   Asignado: 'bg-brand text-white',
@@ -120,6 +121,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setSeleccionadoId(e.id);
     setFicha(e);
     setEditandoFicha(false);
+  };
+  /** Abrir por ID un equipo que quizá no está en la página (conjunto, salas). */
+  const abrirPorId = (id: string) => {
+    api.equipo(id).then(
+      (r) => abrirFicha(r.equipo),
+      () => undefined,
+    );
   };
   const cerrarFicha = () => {
     setSeleccionadoId(null);
@@ -296,7 +304,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           Mismo mecanismo que la bandeja de motivos y que el de colaboradores
           (D28): un número delante es lo que hace que «Sin clasificar» se vea
           sin ir a buscarlo. */}
-      {conteosEmpresa && (
+      {conteosEmpresa && pestana !== 'salas' && (
         <div className="flex flex-wrap items-center gap-2">
           {Object.entries(conteosEmpresa).map(([nombre, n]) => {
             const activa = empresa === nombre;
@@ -335,7 +343,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       )}
 
       <div className="flex items-center gap-1 border-b border-line">
-        {(['todos', 'revision'] as const).map((p) => (
+        {(['todos', 'revision', 'salas'] as const).map((p) => (
           <button
             key={p}
             onClick={() => {
@@ -348,7 +356,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
-            {p === 'todos' ? 'Todos' : 'Bandeja de revisión'}
+            {p === 'todos' ? 'Todos' : p === 'revision' ? 'Bandeja de revisión' : 'Salas de entrenamiento'}
             {p === 'revision' && conteos.length > 0 && (
               <span className="ml-2 text-xs bg-warn/20 text-ink px-1.5 py-0.5 rounded-full">
                 {conteos.reduce((a, c) => a + c.equipos, 0)}
@@ -361,6 +369,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       {/* Los motivos, como bloques. La bandeja se ataca por bloque y no fila a
           fila: "los 37 de licencia" es una tarde de trabajo con una sola cabeza
           puesta; los mismos 37 repartidos entre otros casos no se terminan. */}
+      {/* Salas de entrenamiento: la unidad es el puesto, no el equipo suelto,
+          y por eso es un apartado y no un filtro más de la tabla. */}
+      {pestana === 'salas' ? (
+        <SalasEntrenamiento onAbrir={abrirPorId} />
+      ) : (
+      <>
       {pestana === 'revision' && conteos.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <button
@@ -739,6 +753,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       )}
 
+      </>
+      )}
+
       {seleccionadoId && ficha && ficha.id === seleccionadoId && (
         <Detalle
           // Por ID: cambiar de equipo empieza la ficha de cero (sin «Editar
@@ -749,14 +766,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           editando={editandoFicha}
           onEditando={setEditandoFicha}
           onCerrar={cerrarFicha}
-          onAbrir={(id) => {
-            // Un enlace del conjunto: abre la ficha de esa parte (o de su
-            // computador) en el mismo panel.
-            api.equipo(id).then(
-              (r) => abrirFicha(r.equipo),
-              () => undefined,
-            );
-          }}
+          // Un enlace del conjunto: abre la ficha de esa parte (o de su
+          // computador) en el mismo panel.
+          onAbrir={abrirPorId}
           onMutado={(actualizado) => {
             // El detalle se queda abierto con el equipo ya cambiado: encadenar
             // dos operaciones —reservar y luego asignar— es lo normal, y
@@ -960,6 +972,12 @@ const Detalle: React.FC<{
                 [etiquetaDisco(tipoDe(equipo.categoria)), conGB(equipo.disco), 'disco'],
                 ['Pantalla', equipo.tamano_pantalla, 'tamano_pantalla'],
                 ['Condición', equipo.condicion],
+                ...(equipo.categoria === 'Desktop'
+                  ? ([['Mouse sin serial', equipo.mouse_sin_serial ? 'Sí, lo trae' : 'No']] as [string, string][])
+                  : []),
+                ...(equipo.centro_entrenamiento
+                  ? ([['Sala de entrenamiento', equipo.ubicacion_detalle ?? 'sin escribir']] as [string, string][])
+                  : []),
               ] as [string, string | null | undefined, CampoTecnico?][]
             )
               // Lo técnico solo si el tipo lo lleva (lib/tipos-equipo.ts), o si

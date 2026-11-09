@@ -33,6 +33,7 @@ import {
   marcarNoAsignable,
   movimientosDe,
   primeraSede,
+  puestosEnSalaSql,
   type Servidor,
   type UsuarioDePrueba,
 } from './ayuda.js';
@@ -1401,5 +1402,166 @@ describe('alta por tipo: IMEI y equipo de mesa con accesorios (0026)', () => {
 
     const malo = await c.patch(`/api/equipos/${id}`, { categoria: 'Mouse' });
     assert.equal(malo.estado, 409, 'cambiar de categoría no deja un IMEI en un mouse');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Salas de entrenamiento: puestos agrupados por sala (0027)
+// ---------------------------------------------------------------------------
+//
+// Escrito desde la decisión: un puesto de mesa está completo con pantalla,
+// teclado y mouse; el mouse cuenta igual si es un equipo ligado o si el
+// computador dice que lo trae sin serial. Un portátil está completo solo.
+
+describe('salas de entrenamiento: puestos y completos (0027)', () => {
+  const suite = ambito('salas');
+  let admin: UsuarioDePrueba;
+  let sede: string;
+  const creados: string[] = [];
+  let c: Cliente;
+  const sala = `${suite.prefijo}SALA`;
+
+  type Resumen = { sede_id: string | null; sala: string | null; puestos: number; completos: number };
+  type Puesto = {
+    id: string;
+    categoria: string;
+    mouse_sin_serial: boolean;
+    completo: boolean;
+    partes: { id: string; categoria: string }[];
+  };
+
+  const puesto = async (etq: string, extra: Record<string, unknown>) => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta: `${suite.prefijo}${etq}`,
+      estado: 'Disponible',
+      sede_id: sede,
+      centro_entrenamiento: true,
+      ubicacion_detalle: sala,
+      ...extra,
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    return id;
+  };
+
+  let conMouseSinSerial: string;
+  let conMouseLigado: string;
+  let sinTeclado: string;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    sede = await primeraSede();
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+
+    conMouseSinSerial = await puesto('P1', {
+      mouse_sin_serial: true,
+      accesorios: [
+        { categoria: 'Monitor', etiqueta: `${suite.prefijo}P1-MON` },
+        { categoria: 'Teclado', etiqueta: `${suite.prefijo}P1-TEC` },
+      ],
+    });
+    conMouseLigado = await puesto('P2', {
+      accesorios: [
+        { categoria: 'Monitor', etiqueta: `${suite.prefijo}P2-MON` },
+        { categoria: 'Teclado', etiqueta: `${suite.prefijo}P2-TEC` },
+        { categoria: 'Mouse', serial: `SN-${suite.prefijo}P2-MOU` },
+      ],
+    });
+    sinTeclado = await puesto('P3', {
+      mouse_sin_serial: true,
+      accesorios: [{ categoria: 'Monitor', etiqueta: `${suite.prefijo}P3-MON` }],
+    });
+    await puesto('P4', { categoria: 'Portátil' });
+  });
+
+  after(async () => {
+    const r = await c.get(`/api/salas/puestos?sede_id=${sede}&sala=${encodeURIComponent(sala)}`);
+    const partes = ((r.cuerpo as { puestos?: Puesto[] }).puestos ?? []).flatMap((p) =>
+      p.partes.map((x) => x.id),
+    );
+    await borrarEquipos([...partes, ...creados]);
+    await suite.limpiar();
+  });
+
+  it('la tarjeta cuenta los puestos que cuenta SQL, y los completos según la regla', async () => {
+    const r = await c.get('/api/salas');
+    assert.equal(r.estado, 200);
+    const tarjeta = (r.cuerpo as { salas: Resumen[] }).salas.find(
+      (s) => s.sala === sala && s.sede_id === sede,
+    );
+    assert.ok(tarjeta, 'la sala no salió en /api/salas');
+    // Contra SQL, no contra la API: un número puede cuadrar por accidente.
+    assert.equal(tarjeta.puestos, await puestosEnSalaSql(sala));
+    assert.equal(tarjeta.puestos, 4);
+    // P1 (mouse sin serial), P2 (mouse ligado) y P4 (portátil); P3 no tiene teclado.
+    assert.equal(tarjeta.completos, 3);
+  });
+
+  it('la lista dice lo mismo que la tarjeta, puesto por puesto', async () => {
+    const r = await c.get(`/api/salas/puestos?sede_id=${sede}&sala=${encodeURIComponent(sala)}`);
+    assert.equal(r.estado, 200);
+    const puestos = (r.cuerpo as { puestos: Puesto[] }).puestos;
+    assert.equal(puestos.length, 4, 'las partes no son puestos');
+    const de = (id: string) => puestos.find((p) => p.id === id)!;
+    assert.equal(de(conMouseSinSerial).completo, true, 'el mouse sin serial cuenta como mouse');
+    assert.equal(de(conMouseSinSerial).mouse_sin_serial, true);
+    assert.equal(de(conMouseLigado).completo, true);
+    assert.equal(de(conMouseLigado).partes.length, 3);
+    assert.equal(de(sinTeclado).completo, false, 'sin teclado no está completo');
+    assert.equal(puestos.filter((p) => p.completo).length, 3);
+  });
+
+  it('las partes quedan en la misma sala que su computador', async () => {
+    const conj = await c.get(`/api/equipos/${conMouseLigado}/conjunto`);
+    for (const p of (conj.cuerpo as { partes: { id: string }[] }).partes) {
+      const f = (await c.get(`/api/equipos/${p.id}`)).cuerpo as {
+        equipo: { centro_entrenamiento: boolean; ubicacion_detalle: string | null };
+      };
+      assert.equal(f.equipo.centro_entrenamiento, true);
+      assert.equal(f.equipo.ubicacion_detalle, sala);
+    }
+  });
+
+  it('un equipo de sala sin el nombre de la sala es 400 y no entra', async () => {
+    const etiqueta = `${suite.prefijo}SIN-SALA`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta,
+      estado: 'Disponible',
+      centro_entrenamiento: true,
+    });
+    assert.equal(r.estado, 400);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('«trae mouse sin serial» en un portátil es 409 y no entra', async () => {
+    const etiqueta = `${suite.prefijo}PORT-MOUSE`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta,
+      estado: 'Disponible',
+      mouse_sin_serial: true,
+    });
+    assert.equal(r.estado, 409);
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+
+  it('marcar el mouse sin serial por edición completa el puesto', async () => {
+    const id = await puesto('P5', {
+      accesorios: [
+        { categoria: 'Monitor', etiqueta: `${suite.prefijo}P5-MON` },
+        { categoria: 'Teclado', etiqueta: `${suite.prefijo}P5-TEC` },
+      ],
+    });
+    const lista = async () =>
+      ((await c.get(`/api/salas/puestos?sede_id=${sede}&sala=${encodeURIComponent(sala)}`))
+        .cuerpo as { puestos: Puesto[] }).puestos.find((p) => p.id === id)!;
+    assert.equal((await lista()).completo, false, 'sin mouse no está completo');
+    const r = await c.patch(`/api/equipos/${id}`, { mouse_sin_serial: true });
+    assert.equal(r.estado, 200);
+    assert.equal((await lista()).completo, true);
   });
 });

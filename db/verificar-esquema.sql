@@ -263,6 +263,39 @@ BEGIN
     END;
   END;
 
+  -- 3j. 0027: «trae mouse sin serial» es un dato de un equipo de mesa, y de
+  -- nada más (la decisión: el mouse sin serial no es un equipo propio). Por
+  -- los dos lados, y sin puerta trasera por cambiar de categoría.
+  DECLARE
+    v_mesa uuid;
+  BEGIN
+    BEGIN
+      INSERT INTO equipos (categoria, estado, mouse_sin_serial)
+        VALUES ('Desktop', 'Disponible', true) RETURNING id INTO v_mesa;
+      INSERT INTO resultado VALUES ('0027: equipo de mesa con mouse sin serial', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation OR undefined_column THEN
+      INSERT INTO resultado VALUES ('0027: equipo de mesa con mouse sin serial', 'aceptado', 'RECHAZADO');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, mouse_sin_serial) VALUES ('Portátil', 'Disponible', true);
+      INSERT INTO resultado VALUES ('0027: portátil con mouse sin serial', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0027: portátil con mouse sin serial', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      UPDATE equipos SET categoria = 'Portátil' WHERE id = v_mesa;
+      INSERT INTO resultado VALUES ('0027: equipo de mesa con la marca pasa a portátil', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0027: equipo de mesa con la marca pasa a portátil', 'rechazado', 'rechazado');
+    END;
+
+    INSERT INTO resultado VALUES ('0027: por defecto no trae mouse sin serial', 'false',
+      (SELECT column_default FROM information_schema.columns
+        WHERE table_name = 'equipos' AND column_name = 'mouse_sin_serial'));
+  END;
+
   -- 3f. 0022: el país de un remoto es lista cerrada; departamento y ciudad no.
   BEGIN
     INSERT INTO empleados (nombre, pais, departamento, ciudad)

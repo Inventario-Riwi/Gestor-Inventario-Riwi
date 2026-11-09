@@ -120,6 +120,13 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
   const [sedeId, setSedeId] = useState('');
   const [empleadoId, setEmpleadoId] = useState('');
   const [accesorios, setAccesorios] = useState<Accesorio[]>(ACCESORIOS_VACIOS);
+  /** Sala de entrenamiento: solo para un equipo de mesa. */
+  const [enSala, setEnSala] = useState(false);
+  const [sala, setSala] = useState('');
+  /** 0027. El mouse viene, pero sin serial: no es un equipo propio. */
+  const [mouseSinSerial, setMouseSinSerial] = useState(false);
+  /** Las salas que ya existen, para sugerirlas y no escribir «P3 OCCI» de dos formas. */
+  const [salasConocidas, setSalasConocidas] = useState<string[]>([]);
 
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [empleados, setEmpleados] = useState<EmpleadoConConteo[]>([]);
@@ -144,6 +151,13 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
         if (vigente) setError('No se pudieron cargar sedes y colaboradores.');
       },
     );
+    // Las sugerencias de sala no bloquean nada: si fallan, se escribe a mano.
+    api.salas().then(
+      (r) =>
+        vigente &&
+        setSalasConocidas([...new Set(r.salas.map((x) => x.sala).filter((x): x is string => !!x))]),
+      () => undefined,
+    );
     return () => {
       vigente = false;
     };
@@ -165,6 +179,9 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
     setSedeId('');
     setEmpleadoId('');
     setAccesorios(ACCESORIOS_VACIOS());
+    setEnSala(false);
+    setSala('');
+    setMouseSinSerial(false);
     setError(null);
   };
 
@@ -174,7 +191,7 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
     !!empresa ||
     !!sedeId ||
     !!empleadoId ||
-    (tipo === 'mesa' && accesorios.some(algo));
+    (tipo === 'mesa' && (accesorios.some(algo) || enSala || mouseSinSerial));
 
   /** La X y Cancelar: con algo escrito, pregunta antes de perderlo. */
   const cerrar = async () => {
@@ -197,7 +214,10 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
     if (lleva('imei') && datos.imei.trim() && !/^\d{15}$/.test(datos.imei.replace(/[\s-]/g, '')))
       return 'El IMEI son 15 dígitos.';
     if (tipo === 'mesa') {
-      const sinId = accesorios.find((a) => algo(a) && !a.serial.trim() && !a.etiqueta.trim());
+      if (enSala && !sala.trim()) return 'Escribe el nombre de la sala de entrenamiento.';
+      const sinId = accesorios.find(
+        (a) => algo(a) && !a.serial.trim() && !a.etiqueta.trim() && !(a.categoria === 'Mouse' && mouseSinSerial),
+      );
       if (sinId) return `${sinId.categoria}: hace falta su serial o su etiqueta.`;
     }
     return null;
@@ -235,9 +255,17 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
         empleado_id: empleadoId || null,
         costo: nulo(datos.costo),
         notas: nulo(datos.notas),
+        ...(tipo === 'mesa'
+          ? {
+              mouse_sin_serial: mouseSinSerial,
+              ...(enSala ? { centro_entrenamiento: true, ubicacion_detalle: sala.trim() } : {}),
+            }
+          : {}),
         accesorios:
           tipo === 'mesa'
-            ? accesorios.filter(algo).map((a) => ({
+            ? accesorios
+                .filter((a) => algo(a) && !(a.categoria === 'Mouse' && mouseSinSerial))
+                .map((a) => ({
                 categoria: a.categoria,
                 etiqueta: nulo(a.etiqueta),
                 marca: nulo(a.marca),
@@ -407,22 +435,78 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
                 Cada uno queda como equipo propio, ligado a este equipo de mesa y con su mismo
                 responsable y sede. Deja vacío lo que no tenga.
               </p>
-              {accesorios.map((a, i) => (
-                <div key={a.categoria} className="grid grid-cols-[5rem_1fr_1fr_1fr_1fr] gap-2 items-center">
-                  <span className="font-semibold text-slate-700">{a.categoria}</span>
-                  {(['etiqueta', 'serial', 'marca', 'modelo'] as const).map((c) => (
-                    <input
-                      key={c}
-                      aria-label={`${a.categoria}: ${c}`}
-                      value={a[c]}
-                      onChange={(e) => ponerAccesorio(i, c, e.target.value)}
-                      placeholder={c[0].toUpperCase() + c.slice(1)}
-                      className={`${claseCampo} ${c === 'etiqueta' || c === 'serial' ? 'font-mono' : ''}`}
-                    />
-                  ))}
-                </div>
-              ))}
+              {accesorios.map((a, i) => {
+                const sinSerial = a.categoria === 'Mouse' && mouseSinSerial;
+                return (
+                  <div key={a.categoria} className="space-y-1">
+                    <div className="grid grid-cols-[5rem_1fr_1fr_1fr_1fr] gap-2 items-center">
+                      <span className="font-semibold text-slate-700">{a.categoria}</span>
+                      {(['etiqueta', 'serial', 'marca', 'modelo'] as const).map((c) => (
+                        <input
+                          key={c}
+                          aria-label={`${a.categoria}: ${c}`}
+                          value={sinSerial ? '' : a[c]}
+                          disabled={sinSerial}
+                          onChange={(e) => ponerAccesorio(i, c, e.target.value)}
+                          placeholder={sinSerial ? '—' : c[0].toUpperCase() + c.slice(1)}
+                          className={`${claseCampo} disabled:bg-slate-50 ${c === 'etiqueta' || c === 'serial' ? 'font-mono' : ''}`}
+                        />
+                      ))}
+                    </div>
+                    {a.categoria === 'Mouse' && (
+                      <label className="flex items-center gap-2 pl-[5.5rem] text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={mouseSinSerial}
+                          onChange={(e) => setMouseSinSerial(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded border-slate-300"
+                        />
+                        Lo trae, pero sin serial
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
             </fieldset>
+          )}
+
+          {tipo === 'mesa' && (
+            <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+              <label className="flex items-center gap-2 text-slate-700 font-semibold">
+                <input
+                  type="checkbox"
+                  checked={enSala}
+                  onChange={(e) => setEnSala(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-300"
+                />
+                Va en una sala de entrenamiento
+              </label>
+              {enSala && (
+                <div className="grid grid-cols-3 gap-3 items-end">
+                  <div>
+                    <label htmlFor="alta-sala" className="block text-slate-700 font-semibold mb-1">
+                      Sala *
+                    </label>
+                    <input
+                      id="alta-sala"
+                      list="alta-salas-conocidas"
+                      value={sala}
+                      onChange={(e) => setSala(e.target.value)}
+                      placeholder="p. ej. P3 OCCI"
+                      className={claseCampo}
+                    />
+                    <datalist id="alta-salas-conocidas">
+                      {salasConocidas.map((x) => (
+                        <option key={x} value={x} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <p className="col-span-2 text-[11px] text-slate-500">
+                    El computador y lo que viene con él quedan en esa sala. La sede se elige abajo.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Común a todos: de quién es, dónde está y con quién. */}

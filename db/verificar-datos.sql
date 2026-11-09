@@ -612,6 +612,22 @@ SELECT 'S', 'parte de un puesto de CE fuera de CE', count(*)
 FROM equipos parte JOIN equipos torre ON parte.equipo_principal_id = torre.id
 WHERE torre.centro_entrenamiento AND NOT parte.centro_entrenamiento;
 
+-- Salas de entrenamiento: un puesto está entero en una sala. Una pantalla
+-- ligada a un computador de «P3 OCCI» que dice estar en «P4 ORI» haría que la
+-- tarjeta de una sala contara una pantalla que físicamente está en otra.
+INSERT INTO hallazgo
+SELECT 'S', 'parte de un puesto de CE en otra sala que su computador', count(*)
+FROM equipos parte JOIN equipos torre ON parte.equipo_principal_id = torre.id
+WHERE torre.centro_entrenamiento
+  AND parte.ubicacion_detalle IS DISTINCT FROM torre.ubicacion_detalle;
+
+-- Y un equipo de sala tiene su sala escrita: sin ella aparece en la tarjeta
+-- «Sin sala escrita», que existe para que no se pierda, no para quedarse.
+INSERT INTO hallazgo
+SELECT 'S', 'equipo de sala de entrenamiento sin sala', count(*)
+FROM equipos e
+WHERE e.centro_entrenamiento AND (e.ubicacion_detalle IS NULL OR btrim(e.ubicacion_detalle) = '');
+
 -- 0022: nadie activo vive en una sede retirada. La migración pasó a Remoto a
 -- quienes estaban en Bogotá y Boyacá, y la API no deja entrar en una inactiva;
 -- si aparece alguien, es que se desactivó una sede con gente dentro.

@@ -923,6 +923,21 @@ export async function contarEquiposConEtiqueta(etiqueta: string): Promise<number
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/**
+ * Cuántos computadores (puestos) tiene una sala, contado en SQL y sin pasar
+ * por el repositorio: es el número contra el que se contrasta `GET /api/salas`.
+ */
+export async function puestosEnSalaSql(sala: string): Promise<number> {
+  const r = await db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM equipos
+         WHERE equipos.centro_entrenamiento
+           AND equipos.equipo_principal_id IS NULL
+           AND equipos.ubicacion_detalle = ${sala}
+           AND equipos.estado::text <> 'De baja'`,
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 /** Los movimientos de un equipo, del más antiguo al más nuevo. */
 /** `drizzle.execute<T>` exige que `T` tenga índice de cadena. */
 export type MovimientoDePrueba = {

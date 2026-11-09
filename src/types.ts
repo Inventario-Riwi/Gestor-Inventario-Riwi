@@ -143,6 +143,11 @@ export interface NuevoEquipo {
   licencia_tipo?: TipoLicencia | null;
   tamano_pantalla?: string | null;
   condicion?: CondicionEquipo | null;
+  /** Sala de entrenamiento: la marca y el nombre de la sala («P3 OCCI»). */
+  centro_entrenamiento?: boolean;
+  ubicacion_detalle?: string | null;
+  /** 0027. Solo Desktop: el puesto trae mouse, pero sin serial. */
+  mouse_sin_serial?: boolean;
   /**
    * Solo para un `Desktop`: su pantalla, teclado y mouse. Entran como equipos
    * propios ligados a él, en la misma transacción. Cada uno con serial o etiqueta.
@@ -171,6 +176,35 @@ export interface NuevoEquipo {
    * que no eran personas. Ver `NotasEquipo`.
    */
   notas?: string | null;
+}
+
+/** `GET /api/salas`: una fila por sede y sala. Ver `salas()` en el repositorio. */
+export interface ResumenSala {
+  sede_id: string | null;
+  sede: string | null;
+  sala: string | null;
+  puestos: number;
+  completos: number;
+  en_mantenimiento: number;
+}
+
+/** Un equipo dentro de un puesto: el computador o una de sus partes. */
+export interface EquipoDePuesto {
+  id: string;
+  etiqueta: string | null;
+  serial: string | null;
+  categoria: CategoriaEquipo;
+  marca: string | null;
+  modelo: string | null;
+  nombre_equipo: string | null;
+  estado: EstadoEquipo;
+  mouse_sin_serial: boolean;
+}
+
+/** `GET /api/salas/puestos`: el computador, sus partes y si está completo. */
+export interface PuestoSala extends EquipoDePuesto {
+  partes: EquipoDePuesto[];
+  completo: boolean;
 }
 
 /** Lo que viene con un equipo de mesa. Ver `accesorio` en `server/rutas/equipos.ts`. */
@@ -578,6 +612,8 @@ export interface CambiosEquipo {
   serial_cargador?: string | null;
   /** 0026. Solo celulares y tablets. */
   imei?: string | null;
+  /** 0027. Solo Desktop. */
+  mouse_sin_serial?: boolean;
   empresa?: Empresa;
   propiedad?: PropiedadEquipo;
   sistema_operativo?: string | null;

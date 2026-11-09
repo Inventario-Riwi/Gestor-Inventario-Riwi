@@ -79,6 +79,7 @@ const CAMPOS_PUBLICOS = {
   // 0024. La parte sabe a qué computador pertenece; CE marca las salas.
   equipo_principal_id: equipos.equipo_principal_id,
   centro_entrenamiento: equipos.centro_entrenamiento,
+  mouse_sin_serial: equipos.mouse_sin_serial,
   requiere_revision: equipos.requiere_revision,
   // 5e (D31). Que sea una lista cerrada tiene este precio: una columna nueva no
   // sale por la API hasta que se añade aquí, y el síntoma no dice «falta en la
@@ -801,6 +802,10 @@ export async function crear(
           empleado_id: fila.empleado_id,
           empresa: fila.empresa,
           propiedad: fila.propiedad,
+          // Un puesto de sala lo es entero: su pantalla y su teclado van en la
+          // misma sala.
+          centro_entrenamiento: fila.centro_entrenamiento,
+          ubicacion_detalle: fila.ubicacion_detalle,
           equipo_principal_id: fila.id,
         },
         contexto,
@@ -932,4 +937,146 @@ export async function historial(id: string, bd: BD = db) {
     .from(movimientos)
     .where(eq(movimientos.equipo_id, id))
     .orderBy(desc(movimientos.fecha));
+}
+
+// ---------------------------------------------------------------------------
+// Salas de entrenamiento
+// ---------------------------------------------------------------------------
+//
+// Un **puesto** es un equipo de sala (`centro_entrenamiento`) que no es parte
+// de otro: el computador. Sus **partes** son los equipos ligados a él por
+// `equipo_principal_id` (0024): la pantalla, el teclado y, si tiene serial, el
+// mouse. El mouse sin serial es un dato del computador (0027).
+//
+// Lo dado de baja no cuenta: está fuera de circulación, y un puesto con la
+// pantalla de baja no tiene pantalla.
+
+/**
+ * La condición de «puesto completo», en SQL, sobre el alias `p`.
+ *
+ * Un portátil trae pantalla, teclado y touchpad: está completo por sí mismo.
+ * Un equipo de mesa necesita pantalla, teclado y mouse (ligado, o sin serial).
+ */
+const PUESTO_COMPLETO = sql`(
+  p.categoria::text <> 'Desktop'
+  OR (
+    EXISTS (SELECT 1 FROM equipos m WHERE m.equipo_principal_id = p.id
+             AND m.categoria::text = 'Monitor' AND m.estado::text <> 'De baja')
+    AND EXISTS (SELECT 1 FROM equipos t WHERE t.equipo_principal_id = p.id
+             AND t.categoria::text = 'Teclado' AND t.estado::text <> 'De baja')
+    AND (
+      p.mouse_sin_serial
+      OR EXISTS (SELECT 1 FROM equipos r WHERE r.equipo_principal_id = p.id
+             AND r.categoria::text = 'Mouse' AND r.estado::text <> 'De baja')
+    )
+  )
+)`;
+
+export interface ResumenSala {
+  sede_id: string | null;
+  sede: string | null;
+  /** `null`: equipos de sala sin la sala escrita. */
+  sala: string | null;
+  puestos: number;
+  completos: number;
+  en_mantenimiento: number;
+}
+
+/**
+ * Una fila por sede y sala, con cuántos puestos tiene y cuántos están
+ * completos. SQL crudo con cada columna calificada a mano por su alias: hay
+ * subconsultas correlacionadas, y es justo el caso en que la interpolación de
+ * drizzle resuelve contra la tabla equivocada sin decir nada (CLAUDE.md).
+ */
+export async function salas(bd: BD = db): Promise<ResumenSala[]> {
+  const r = await bd.execute<{
+    sede_id: string | null;
+    sede: string | null;
+    sala: string | null;
+    puestos: number;
+    completos: number;
+    en_mantenimiento: number;
+  }>(sql`
+    SELECT p.sede_id, s.nombre AS sede, p.ubicacion_detalle AS sala,
+           count(*)::int AS puestos,
+           count(*) FILTER (WHERE ${PUESTO_COMPLETO})::int AS completos,
+           count(*) FILTER (WHERE p.estado::text = 'En mantenimiento')::int AS en_mantenimiento
+      FROM equipos p
+      LEFT JOIN sedes s ON s.id = p.sede_id
+     WHERE p.centro_entrenamiento
+       AND p.equipo_principal_id IS NULL
+       AND p.estado::text <> 'De baja'
+     GROUP BY p.sede_id, s.nombre, p.ubicacion_detalle
+     ORDER BY s.nombre NULLS LAST, p.ubicacion_detalle NULLS LAST`);
+  return r.rows.map((f) => ({
+    ...f,
+    puestos: Number(f.puestos),
+    completos: Number(f.completos),
+    en_mantenimiento: Number(f.en_mantenimiento),
+  }));
+}
+
+const RESUMEN_PUESTO = {
+  id: equipos.id,
+  etiqueta: equipos.etiqueta,
+  serial: equipos.serial,
+  categoria: equipos.categoria,
+  marca: equipos.marca,
+  modelo: equipos.modelo,
+  nombre_equipo: equipos.nombre_equipo,
+  estado: equipos.estado,
+  mouse_sin_serial: equipos.mouse_sin_serial,
+} as const;
+
+/**
+ * Los puestos de una sala, cada uno con sus partes.
+ *
+ * Dos consultas con los helpers tipados —sin SQL crudo, así drizzle califica
+ * solo— en vez de un JOIN: un puesto con tres partes no se repite tres veces.
+ * `sala === null` pide los de sala sin escribir.
+ */
+export async function puestosDeSala(sedeId: string | null, sala: string | null, bd: BD = db) {
+  const principales = await bd
+    .select(RESUMEN_PUESTO)
+    .from(equipos)
+    .where(
+      and(
+        eq(equipos.centro_entrenamiento, true),
+        isNull(equipos.equipo_principal_id),
+        sql`${equipos.estado}::text <> 'De baja'`,
+        sedeId === null ? isNull(equipos.sede_id) : eq(equipos.sede_id, sedeId),
+        sala === null ? isNull(equipos.ubicacion_detalle) : eq(equipos.ubicacion_detalle, sala),
+      ),
+    )
+    .orderBy(asc(equipos.etiqueta));
+
+  if (principales.length === 0) return [];
+
+  const partes = await bd
+    .select({ ...RESUMEN_PUESTO, equipo_principal_id: equipos.equipo_principal_id })
+    .from(equipos)
+    .where(
+      and(
+        inArray(
+          equipos.equipo_principal_id,
+          principales.map((p) => p.id),
+        ),
+        sql`${equipos.estado}::text <> 'De baja'`,
+      ),
+    )
+    .orderBy(asc(equipos.categoria), asc(equipos.etiqueta));
+
+  return principales.map((p) => {
+    const suyas = partes.filter((x) => x.equipo_principal_id === p.id);
+    const hay = (c: string) => suyas.some((x) => x.categoria === c);
+    return {
+      ...p,
+      partes: suyas.map(({ equipo_principal_id: _, ...x }) => x),
+      // La misma regla que PUESTO_COMPLETO, para la fila. El test contrasta
+      // las dos: la tarjeta y la lista no pueden contar distinto.
+      completo:
+        p.categoria !== 'Desktop' ||
+        (hay('Monitor') && hay('Teclado') && (p.mouse_sin_serial || hay('Mouse'))),
+    };
+  });
 }
