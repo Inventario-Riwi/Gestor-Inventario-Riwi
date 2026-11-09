@@ -3,6 +3,7 @@ import { Loader2, Pencil } from 'lucide-react';
 
 import type { EquipoConMotivos } from '../types';
 import { api, ErrorApi } from '../lib/api';
+import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
 
 /**
  * Las notas de un equipo, editables.
@@ -52,9 +53,11 @@ export function unirNotas(origen: string[], libres: string): string | null {
 interface NotasEquipoProps {
   equipo: EquipoConMotivos;
   onGuardado: (equipo: EquipoConMotivos) => void;
+  /** Para que la X de la ficha sepa si hay notas a medio escribir. */
+  control?: React.MutableRefObject<ControlSinGuardar | null>;
 }
 
-export const NotasEquipo: React.FC<NotasEquipoProps> = ({ equipo, onGuardado }) => {
+export const NotasEquipo: React.FC<NotasEquipoProps> = ({ equipo, onGuardado, control }) => {
   const partido = partirNotas(equipo.notas ?? null);
 
   const [editando, setEditando] = useState(false);
@@ -72,7 +75,23 @@ export const NotasEquipo: React.FC<NotasEquipoProps> = ({ equipo, onGuardado }) 
     setError(null);
   }, [equipo.id, equipo.notas]);
 
-  const guardar = async () => {
+  const sucio = editando && (libres.trim() !== partido.libres.trim() || !conservarOrigen);
+  const [ventana, preguntar] = useConfirmacion();
+
+  const descartar = () => {
+    setEditando(false);
+    setLibres(partido.libres);
+    setConservarOrigen(true);
+  };
+
+  const cancelar = async () => {
+    if (!sucio) return descartar();
+    const r = await preguntar(SIN_GUARDAR);
+    if (r === 'confirmar') await guardar();
+    else if (r === 'alterno') descartar();
+  };
+
+  const guardar = async (): Promise<boolean> => {
     setGuardando(true);
     setError(null);
     try {
@@ -81,15 +100,20 @@ export const NotasEquipo: React.FC<NotasEquipoProps> = ({ equipo, onGuardado }) 
       });
       setEditando(false);
       onGuardado(r.equipo);
+      return true;
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : 'No se pudieron guardar las notas.');
+      return false;
     } finally {
       setGuardando(false);
     }
   };
 
+  if (control) control.current = { sucio: () => sucio, guardar };
+
   return (
     <div className="space-y-2">
+      {ventana}
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-ink-muted">Notas</p>
         {!editando && (
@@ -149,11 +173,7 @@ export const NotasEquipo: React.FC<NotasEquipoProps> = ({ equipo, onGuardado }) 
           )}
           <div className="flex justify-end gap-2">
             <button
-              onClick={() => {
-                setEditando(false);
-                setLibres(partido.libres);
-                setConservarOrigen(true);
-              }}
+              onClick={() => void cancelar()}
               disabled={guardando}
               className="px-3 py-1.5 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50"
             >

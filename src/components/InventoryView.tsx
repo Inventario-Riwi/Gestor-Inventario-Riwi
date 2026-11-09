@@ -24,6 +24,7 @@ import type {
 import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
 import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
+import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
@@ -201,8 +202,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // debajo de un formulario a medio escribir.
   useSondeo(() => cargar({ silencioso: true }), INTERVALO_SONDEO_MS, !editandoFicha);
 
+  const [ventana, preguntar] = useConfirmacion();
+
   const cerrarBloque = async () => {
     if (!motivo || !enBloque) return;
+    const r0 = await preguntar({
+      titulo: `¿Cerrar «${motivo}» en ${total} equipo${total === 1 ? '' : 's'}?`,
+      mensaje:
+        'Se da por resuelto en todos a la vez, y la nota queda escrita en cada uno. Si alguno no se deja cerrar, sigue en la bandeja.',
+      confirmar: `Cerrar ${total}`,
+    });
+    if (r0 !== 'confirmar') return;
     setCerrandoBloque(true);
     setError(null);
     try {
@@ -250,6 +260,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   return (
     <div className="space-y-5">
+      {ventana}
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
@@ -852,6 +863,28 @@ const Detalle: React.FC<{
   const setEditando = onEditando;
 
   /**
+   * Salir de la ficha (la X, o abrir otra desde el conjunto) con datos o notas
+   * a medio escribir pregunta antes. Los dos formularios viven dentro y se
+   * dejan ver por estos refs: si hay algo sucio y cómo guardarlo.
+   */
+  const controlEditar = useRef<ControlSinGuardar | null>(null);
+  const controlNotas = useRef<ControlSinGuardar | null>(null);
+  const [ventana, preguntar] = useConfirmacion();
+  const salir = async (despues: () => void) => {
+    const sucios = [controlEditar.current, controlNotas.current].filter(
+      (c): c is ControlSinGuardar => c !== null && c.sucio(),
+    );
+    if (sucios.length > 0) {
+      const r = await preguntar(SIN_GUARDAR);
+      if (r === 'cancelar') return;
+      if (r === 'confirmar') {
+        for (const c of sucios) if (!(await c.guardar())) return;
+      }
+    }
+    despues();
+  };
+
+  /**
    * El fondo NO cierra la ficha: solo la ✕. Cerraba con un clic en el fondo y
    * eso la cerraba sin querer con dos gestos normales: volver a la ventana del
    * navegador haciendo clic en la zona gris, y seleccionar texto arrastrando y
@@ -860,6 +893,7 @@ const Detalle: React.FC<{
    */
   return (
     <div className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4">
+      {ventana}
       <div className="bg-surface border border-line rounded-xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -881,7 +915,7 @@ const Detalle: React.FC<{
                 Editar datos
               </button>
             )}
-            <button onClick={onCerrar} className="p-2 text-ink-muted hover:text-ink" aria-label="Cerrar">
+            <button onClick={() => void salir(onCerrar)} className="p-2 text-ink-muted hover:text-ink" aria-label="Cerrar">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -892,11 +926,12 @@ const Detalle: React.FC<{
         <ResolverMotivos equipo={equipo} onCambiado={onMutado} />
 
         {/* 0024. El computador y sus partes, con enlace a cada ficha. */}
-        <ConjuntoEquipo equipo={equipo} onAbrir={onAbrir} />
+        <ConjuntoEquipo equipo={equipo} onAbrir={(id) => void salir(() => onAbrir(id))} />
 
         {editando ? (
           <EditarEquipo
             equipo={equipo}
+            control={controlEditar}
             onCancelar={() => setEditando(false)}
             onGuardado={(e) => {
               setEditando(false);
@@ -940,7 +975,7 @@ const Detalle: React.FC<{
         )}
 
         {/* Editables desde la 5c, con lo del importador protegido aparte. */}
-        <NotasEquipo equipo={equipo} onGuardado={onMutado} />
+        <NotasEquipo equipo={equipo} onGuardado={onMutado} control={controlNotas} />
 
         {/* La clave BIOS y el serial de Windows no están aquí: no salen en ningún
             listado ni detalle (§5.2). Solo por GET /api/equipos/:id/bios, con rol

@@ -452,6 +452,12 @@ export const api = {
     pedir<{ actas: ActaResumen[] }>(`/api/actas${consulta(f)}`),
 
   /** Desactivar a alguien. 409 si tiene equipos a su nombre. */
+  /** Reactivar una ficha inactiva: vuelve a «Activo» (sincronizarEstado, en el servidor). */
+  activarEmpleado: (id: string) =>
+    pedir<{ empleado: EmpleadoConConteo }>(`/api/empleados/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ activo: true }),
+    }),
   desactivarEmpleado: (id: string) =>
     pedir<{ empleado: EmpleadoConConteo }>(`/api/empleados/${id}`, {
       method: 'PATCH',

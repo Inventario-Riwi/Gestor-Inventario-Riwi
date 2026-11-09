@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 import type {
   CatalogoTransiciones,
@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { PRESTATARIOS } from '../types';
 import { api, ErrorApi } from '../lib/api';
+import { useConfirmacion } from './Confirmacion';
 
 /**
  * Los botones de las mutaciones, en el detalle de un equipo.
@@ -31,6 +32,20 @@ import { api, ErrorApi } from '../lib/api';
  * inalcanzable. Y con consecuencia: quien no encuentra cómo dar de baja un
  * equipo termina pidiendo que se lo cambien en la base a mano.
  */
+
+/**
+ * Qué hace cada operación de un clic, para la ventana de confirmación.
+ *
+ * Solo texto: si la operación existe y cuándo es legal lo sigue diciendo el
+ * servidor. `explicacion` del catálogo no sirve aquí porque cuenta cuándo NO
+ * se puede, que es lo que dice el 409.
+ */
+const QUE_HACE: Partial<Record<Operacion, string>> = {
+  devolver: 'Deja de estar a nombre de su responsable y queda disponible.',
+  reservar: 'Queda apartado: no se ofrece para asignar hasta que se libere.',
+  liberar: 'Deja de estar reservado y vuelve a quedar disponible.',
+  recuperar_prestamo: 'La empresa a la que se prestó lo devuelve, y queda disponible.',
+};
 
 interface AccionesEquipoProps {
   equipo: EquipoConMotivos;
@@ -61,10 +76,10 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
   const [transportadora, setTransportadora] = useState('');
   const [guia, setGuia] = useState('');
   const [fechaEstimada, setFechaEstimada] = useState('');
-  const [confirmando, setConfirmando] = useState<Operacion | null>(null);
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ventana, preguntar] = useConfirmacion();
 
   useEffect(() => {
     let vigente = true;
@@ -92,7 +107,6 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
   // traslado de otro equipo no puede quedar en pantalla apuntando a este.
   useEffect(() => {
     setAbierta(null);
-    setConfirmando(null);
     setError(null);
   }, [equipo.id]);
 
@@ -156,7 +170,6 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       else throw new Error(`La operación «${op}» no se dispara desde aquí.`);
 
       setAbierta(null);
-      setConfirmando(null);
       setEmpleadoId('');
       setSedeId('');
       setPrestadoA('');
@@ -175,19 +188,41 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
     }
   };
 
-  const pulsar = (op: Operacion) => {
+  /**
+   * Las que piden un dato (a quién, a qué sede…) abren su formulario, y su
+   * botón de aceptar ya es la confirmación. Las de un clic —devolver,
+   * reservar, liberar, recuperar préstamo, dar de baja— preguntan antes: un
+   * clic equivocado deja un movimiento en el historial que no se borra.
+   */
+  const pulsar = async (op: Operacion) => {
     setError(null);
     const t = de(op);
-    if (t.requiere || t.irreversible) {
+    if (t.requiere) {
       setAbierta(op);
-      setConfirmando(t.irreversible && !t.requiere ? op : null);
-    } else {
-      void ejecutar(op);
+      return;
     }
+    setAbierta(null);
+    const quien = equipo.etiqueta ?? equipo.serial ?? equipo.categoria;
+    const r = await preguntar({
+      titulo: `¿${t.etiqueta} ${quien}?`,
+      mensaje: t.irreversible ? (
+        <>
+          <strong className="text-ink">No se deshace:</strong> no hay operación que devuelva un
+          equipo desde «De baja». Queda en el inventario con su historial completo, pero fuera de
+          circulación.
+        </>
+      ) : (
+        <>{QUE_HACE[op] ?? 'Cambia el estado del equipo.'} Queda registrado en su historial.</>
+      ),
+      confirmar: t.etiqueta,
+      peligro: t.irreversible,
+    });
+    if (r === 'confirmar') await ejecutar(op);
   };
 
   return (
     <div className="space-y-3 pt-4 border-t border-line">
+      {ventana}
       <p className="text-xs text-ink-muted">
         Operaciones disponibles con el equipo <strong className="text-ink">{equipo.estado}</strong>
       </p>
@@ -206,7 +241,7 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
             return (
               <button
                 key={op}
-                onClick={() => pulsar(op)}
+                onClick={() => void pulsar(op)}
                 disabled={enviando}
                 title={t.explicacion}
                 className={`px-3 py-1.5 text-sm rounded-lg border font-medium disabled:opacity-50 ${
@@ -414,27 +449,6 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
         </div>
       )}
 
-      {/* Baja: no pide datos, pide confirmación */}
-      {confirmando === 'baja' && (
-        <div className="bg-danger/5 border border-danger/40 rounded-lg p-3 space-y-2">
-          <p className="text-sm text-ink flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
-            Dar de baja no se deshace: no hay operación que devuelva un equipo desde «De baja».
-            Quedará en el inventario con su historial completo, pero fuera de circulación.
-          </p>
-          <Botonera
-            enviando={enviando}
-            puede
-            onCancelar={() => {
-              setConfirmando(null);
-              setAbierta(null);
-            }}
-            onAceptar={() => void ejecutar('baja')}
-            texto="Dar de baja"
-            peligro
-          />
-        </div>
-      )}
     </div>
   );
 };

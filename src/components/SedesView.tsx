@@ -13,6 +13,7 @@ import {
 import type { SedeConConteos, TrasladoAbierto } from '../types';
 import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
+import { useConfirmacion } from './Confirmacion';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
 /**
@@ -76,8 +77,16 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
 
   useSondeo(() => cargar({ silencioso: true }));
 
+  const [ventana, preguntar] = useConfirmacion();
+
   const confirmar = useCallback(
     async (traslado: TrasladoAbierto) => {
+      const r = await preguntar({
+        titulo: `¿Confirmar que llegó a ${traslado.sede_destino}?`,
+        mensaje: `El equipo pasa a estar en ${traslado.sede_destino} y el traslado se cierra. Confírmalo solo si ya lo tienen allá.`,
+        confirmar: 'Confirmar llegada',
+      });
+      if (r !== 'confirmar') return;
       setConfirmando(traslado.id);
       setErrorConfirmar(null);
       try {
@@ -94,7 +103,7 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
         setConfirmando(null);
       }
     },
-    [cargar, onTrasladoConfirmado],
+    [cargar, onTrasladoConfirmado, preguntar],
   );
 
   useEffect(() => {
@@ -103,6 +112,7 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
 
   return (
     <div className="space-y-6">
+      {ventana}
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2">

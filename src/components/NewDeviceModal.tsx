@@ -23,6 +23,7 @@ import confetti from 'canvas-confetti';
 import { api, ErrorApi } from '../lib/api';
 import { etiquetaEmpresa } from '../lib/empresas';
 import { etiquetaDisco, TIPOS, type Tipo } from '../lib/tipos-equipo';
+import { SIN_GUARDAR, useConfirmacion } from './Confirmacion';
 
 interface NewDeviceModalProps {
   isOpen: boolean;
@@ -124,6 +125,7 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
   const [empleados, setEmpleados] = useState<EmpleadoConConteo[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ventana, preguntar] = useConfirmacion();
 
   // Los desplegables se piden al abrir, no al montar: el modal vive montado
   // todo el rato y pedirlos al arrancar sería una consulta que casi nadie usa.
@@ -166,8 +168,22 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
     setError(null);
   };
 
-  const cerrar = () => {
+  /** Algo escrito o elegido que se perdería al cerrar. El tipo no cuenta. */
+  const sucio =
+    Object.values(datos).some((v) => v.trim() !== '') ||
+    !!empresa ||
+    !!sedeId ||
+    !!empleadoId ||
+    (tipo === 'mesa' && accesorios.some(algo));
+
+  /** La X y Cancelar: con algo escrito, pregunta antes de perderlo. */
+  const cerrar = async () => {
     if (guardando) return;
+    if (sucio) {
+      const r = await preguntar(SIN_GUARDAR);
+      if (r === 'cancelar') return;
+      if (r === 'confirmar') return void guardar();
+    }
     limpiar();
     onClose();
   };
@@ -187,8 +203,12 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
     return null;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    void guardar();
+  };
+
+  const guardar = async () => {
     if (guardando) return;
     const p = problema();
     if (p) return setError(p);
@@ -279,9 +299,10 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+      {ventana}
       <div className="bg-white border border-slate-200 rounded-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 space-y-5 shadow-xl relative animate-aparecer text-slate-900">
         <button
-          onClick={cerrar}
+          onClick={() => void cerrar()}
           aria-label="Cerrar"
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 bg-slate-50 rounded-xl border border-slate-200 transition-colors"
         >
@@ -493,7 +514,7 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
             <button
               type="button"
-              onClick={cerrar}
+              onClick={() => void cerrar()}
               disabled={guardando}
               className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-lg border border-slate-200 disabled:opacity-50"
             >

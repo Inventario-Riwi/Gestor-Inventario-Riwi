@@ -10,7 +10,9 @@ import { crearApp } from "./server/app.js";
 import { exigirClaveDeCifradoValida } from "./db/comprobar-cifrado.js";
 
 const app = express();
-const PORT = 3000;
+// `docker-compose.produccion.yml` ya pasa PORT=3000. En el portátil sirve para
+// no chocar con otra aplicación que tenga ocupado el 3000.
+const PORT = Number(process.env.PORT) || 3000;
 
 // Aquí había un `express.json({ limit: "10mb" })`. Existía para los payloads
 // del copiloto, y como corría antes que la API, **anulaba en silencio el límite

@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Loader2, PackageOpen, UserMinus, X } from 'lucide
 
 import type { EmpleadoConConteo, EquipoResumen } from '../types';
 import { api, ErrorApi } from '../lib/api';
+import { useConfirmacion } from './Confirmacion';
 
 /**
  * Recoger los equipos de alguien que se va. **Es la operación contraria a
@@ -93,7 +94,16 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
     ? equipos.filter((e) => !resultados.some((r) => r.equipo.id === e.id && r.ok)).length
     : equipos.length;
 
+  const [ventana, preguntar] = useConfirmacion();
+
   const devolver = async () => {
+    const n = marcados.length;
+    const ok = await preguntar({
+      titulo: `¿Registrar la devolución de ${n} equipo${n === 1 ? '' : 's'}?`,
+      mensaje: `Quedan disponibles y dejan de figurar a nombre de ${empleado.nombre}. Cada uno queda en su historial.`,
+      confirmar: 'Registrar devolución',
+    });
+    if (ok !== 'confirmar') return;
     setEnviando(true);
     const hechos: Resultado[] = [];
 
@@ -116,6 +126,14 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
   };
 
   const desactivar = async () => {
+    const ok = await preguntar({
+      titulo: `¿Desactivar la ficha de ${empleado.nombre}?`,
+      mensaje:
+        'No se borra nada: deja de aparecer en asignaciones nuevas y su historial se conserva. Se puede reactivar desde Colaboradores.',
+      confirmar: 'Desactivar ficha',
+      peligro: true,
+    });
+    if (ok !== 'confirmar') return;
     setDesactivando(true);
     setErrorDesactivar(null);
     try {
@@ -136,6 +154,7 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4">
+      {ventana}
       <div className="bg-surface border border-line rounded-xl w-full max-w-xl p-6 space-y-4 shadow-xl relative max-h-[85vh] overflow-y-auto animate-aparecer">
         <button
           onClick={onClose}

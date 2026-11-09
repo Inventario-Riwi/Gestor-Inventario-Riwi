@@ -11,6 +11,7 @@ import {
   Phone,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   UserPlus,
   Users,
@@ -22,6 +23,7 @@ import { EMPRESAS, ESTADOS_EMPLEADO, PAISES } from '../types';
 import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
+import { SIN_GUARDAR, useConfirmacion } from './Confirmacion';
 
 /**
  * Los 113 colaboradores reales, desde Postgres.
@@ -149,12 +151,36 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   useSondeo(() => cargar({ silencioso: true }));
 
-  const desactivar = useCallback(
-    async (emp: EmpleadoConConteo) => {
+  const [ventana, preguntar] = useConfirmacion();
+
+  /**
+   * Desactivar y reactivar, los dos con confirmación. Comparten el estado de
+   * «en curso» y el error por tarjeta: son el mismo botón en dos momentos.
+   */
+  const cambiarActivo = useCallback(
+    async (emp: EmpleadoConConteo, activo: boolean) => {
+      const respuesta = await preguntar(
+        activo
+          ? {
+              titulo: `¿Reactivar la ficha de ${emp.nombre}?`,
+              mensaje:
+                'Vuelve a aparecer en los listados de gente activa y se le pueden asignar equipos. Su estado pasa a «Activo».',
+              confirmar: 'Reactivar ficha',
+            }
+          : {
+              titulo: `¿Desactivar la ficha de ${emp.nombre}?`,
+              mensaje:
+                'No se borra nada: deja de aparecer en asignaciones nuevas y su historial se conserva. Se puede reactivar después.',
+              confirmar: 'Desactivar ficha',
+              peligro: true,
+            },
+      );
+      if (respuesta !== 'confirmar') return;
       setDesactivandoId(emp.id);
       setErrorDesactivar(null);
       try {
-        await api.desactivarEmpleado(emp.id);
+        if (activo) await api.activarEmpleado(emp.id);
+        else await api.desactivarEmpleado(emp.id);
         await cargar();
       } catch (e) {
         // El 409 dice «No se puede desactivar a un empleado con equipos a su
@@ -162,13 +188,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         // que hacer, y el botón de Offboarding está justo encima.
         setErrorDesactivar({
           id: emp.id,
-          mensaje: e instanceof ErrorApi ? e.message : 'No se pudo desactivar.',
+          mensaje:
+            e instanceof ErrorApi
+              ? e.message
+              : activo
+                ? 'No se pudo reactivar.'
+                : 'No se pudo desactivar.',
         });
       } finally {
         setDesactivandoId(null);
       }
     },
-    [cargar],
+    [cargar, preguntar],
   );
 
   useEffect(() => {
@@ -234,6 +265,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   return (
     <div className="space-y-5">
+      {ventana}
       {editando && (
         <FormularioEmpleado
           empleado={editando === 'nuevo' ? null : editando}
@@ -513,13 +545,34 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                           equipos a su nombre el servidor responde 409, y ese
                           mensaje es exactamente el que hay que enseñar. */}
                       <button
-                        onClick={() => void desactivar(emp)}
+                        onClick={() => void cambiarActivo(emp, false)}
                         disabled={desactivandoId === emp.id}
                         className="w-full text-xs text-ink-muted hover:text-danger border border-line rounded-lg py-1.5 disabled:opacity-50"
                       >
                         {desactivandoId === emp.id ? 'Desactivando…' : 'Desactivar ficha'}
                       </button>
 
+                      {errorDesactivar?.id === emp.id && (
+                        <p
+                          role="alert"
+                          className="text-xs text-danger bg-danger/10 border border-danger/40 rounded-lg px-2 py-1.5"
+                        >
+                          {errorDesactivar.mensaje}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {!emp.activo && (
+                    <div className="space-y-1.5">
+                      <button
+                        onClick={() => void cambiarActivo(emp, true)}
+                        disabled={desactivandoId === emp.id}
+                        className="w-full text-xs text-brand hover:bg-brand/10 border border-brand/40 rounded-lg py-1.5 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {desactivandoId === emp.id ? 'Reactivando…' : 'Reactivar ficha'}
+                      </button>
                       {errorDesactivar?.id === emp.id && (
                         <p
                           role="alert"
@@ -604,6 +657,10 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
     ciudad: empleado?.ciudad ?? '',
     empresa: empleado?.empresa ?? 'Sin clasificar',
   });
+  /** Con qué se abrió: la base de «hay cambios sin guardar». */
+  const [inicial] = useState(() => JSON.stringify(datos));
+  const hayCambios = JSON.stringify(datos) !== inicial;
+  const [ventana, preguntar] = useConfirmacion();
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -671,6 +728,14 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
     }
   };
 
+  /** Cerrar con la X o con Cancelar: si hay algo escrito, se pregunta antes. */
+  const intentarCerrar = async () => {
+    if (!hayCambios) return onCerrar();
+    const r = await preguntar(SIN_GUARDAR);
+    if (r === 'confirmar') await guardar();
+    else if (r === 'alterno') onCerrar();
+  };
+
   const campo = (
     etiqueta: string,
     clave: keyof DatosEmpleado,
@@ -693,10 +758,11 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
         <h2 className="font-semibold text-ink">
           {empleado ? `Editar ficha de ${empleado.nombre}` : 'Nueva ficha de colaborador'}
         </h2>
-        <button onClick={onCerrar} className="text-ink-muted hover:text-ink" aria-label="Cerrar">
+        <button onClick={() => void intentarCerrar()} className="text-ink-muted hover:text-ink" aria-label="Cerrar">
           <X className="w-4 h-4" />
         </button>
       </div>
+      {ventana}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label className="text-xs text-ink-muted space-y-1 md:col-span-2">
@@ -806,7 +872,7 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
           {enviando && <Loader2 className="w-4 h-4 animate-spin" />}
           {empleado ? 'Guardar cambios' : 'Crear ficha'}
         </button>
-        <button onClick={onCerrar} className="text-sm text-ink-muted hover:text-ink px-3 py-2">
+        <button onClick={() => void intentarCerrar()} className="text-sm text-ink-muted hover:text-ink px-3 py-2">
           Cancelar
         </button>
         {!datos.nombre.trim() && <span className="text-xs text-ink-muted">Falta el nombre.</span>}

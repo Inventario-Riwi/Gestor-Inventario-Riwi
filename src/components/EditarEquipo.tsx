@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { CambiosEquipo, EquipoConMotivos } from '../types';
 import {
@@ -9,6 +9,7 @@ import {
   TIPOS_LICENCIA,
 } from '../types';
 import { api, ErrorApi } from '../lib/api';
+import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
 import { etiquetaEmpresa } from '../lib/empresas';
 import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 
@@ -76,7 +77,9 @@ export const EditarEquipo: React.FC<{
   equipo: EquipoConMotivos;
   onCancelar: () => void;
   onGuardado: (equipo: EquipoConMotivos) => void;
-}> = ({ equipo, onCancelar, onGuardado }) => {
+  /** Para que la X de la ficha sepa si hay algo sin guardar. */
+  control?: React.MutableRefObject<ControlSinGuardar | null>;
+}> = ({ equipo, onCancelar, onGuardado, control }) => {
   /**
    * Los valores con que se abrió el formulario. Son la base de «qué cambió», y
    * no el `equipo` que llegue después: si la ficha se pusiera al día mientras
@@ -119,21 +122,44 @@ export const EditarEquipo: React.FC<{
   const hayCambios = Object.keys(pendientes).length > 0;
   const sinEtiqueta = datos.etiqueta.trim() === '' && equipo.etiqueta !== null;
 
-  const guardar = async () => {
-    if (!hayCambios) return onCancelar();
+  const guardar = async (): Promise<boolean> => {
+    if (!hayCambios) {
+      onCancelar();
+      return true;
+    }
     setGuardando(true);
     setError(null);
     try {
       const r = await api.actualizarEquipo(equipo.id, pendientes);
       onGuardado({ ...equipo, ...r.equipo });
+      return true;
     } catch (e) {
       // El 409 de serial o etiqueta repetidos llega tal cual: es un dato real
       // que hay que resolver, no un fallo de la pantalla.
       setError(e instanceof ErrorApi ? e.message : 'No se pudieron guardar los cambios.');
+      return false;
     } finally {
       setGuardando(false);
     }
   };
+
+  const [ventana, preguntar] = useConfirmacion();
+
+  /** Cancelar con algo escrito pregunta antes: Guardar, Descartar o seguir. */
+  const cancelar = async () => {
+    if (!hayCambios) return onCancelar();
+    const r = await preguntar(SIN_GUARDAR);
+    if (r === 'confirmar') await guardar();
+    else if (r === 'alterno') onCancelar();
+  };
+
+  if (control) control.current = { sucio: () => hayCambios, guardar };
+  useEffect(
+    () => () => {
+      if (control) control.current = null;
+    },
+    [control],
+  );
 
   const clase =
     'w-full bg-surface border border-line rounded-lg px-3 py-1.5 text-sm text-ink focus:outline-none focus:border-brand';
@@ -175,6 +201,7 @@ export const EditarEquipo: React.FC<{
 
   return (
     <div className="space-y-3">
+      {ventana}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {lista('Categoría', 'categoria', CATEGORIAS_EQUIPO)}
         {texto('Etiqueta', 'etiqueta')}
@@ -215,7 +242,7 @@ export const EditarEquipo: React.FC<{
 
       <div className="flex justify-end gap-2">
         <button
-          onClick={onCancelar}
+          onClick={() => void cancelar()}
           disabled={guardando}
           className="px-3 py-1.5 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50"
         >
