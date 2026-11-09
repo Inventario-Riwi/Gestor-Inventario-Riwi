@@ -1,10 +1,9 @@
 import React from 'react';
-import { Search, Plus, PackageCheck, LogOut } from 'lucide-react';
+import { Search, PackageCheck, LogOut } from 'lucide-react';
 import { LogoRiwiStock } from './LogoRiwiStock';
 
 interface HeaderProps {
   onCerrarSesion: () => void;
-  onOpenNewDeviceModal: () => void;
   onOpenOnboardingModal: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -13,7 +12,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onOpenNewDeviceModal,
   onOpenOnboardingModal,
   activeTab,
   setActiveTab,
@@ -98,22 +96,17 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Entregar equipos</span>
             </button>
 
-            {/* Quick Action: Add Device */}
+            {/* «Nuevo equipo» ya no está aquí: salía dos veces, aquí y en el
+                encabezado de Inventario. Se dejó el de Inventario, que es la
+                pantalla de los equipos. */}
             <button
-            type="button"
-            onClick={onCerrarSesion}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium text-xs rounded-lg shadow-sm transition-colors"
-            title="Cerrar sesión"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Cerrar sesión</span>
-          </button>
-            <button
-              onClick={onOpenNewDeviceModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand hover:bg-brand-hover text-white font-medium text-xs rounded-lg shadow-sm transition-colors"
+              type="button"
+              onClick={onCerrarSesion}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium text-xs rounded-lg shadow-sm transition-colors"
+              title="Cerrar sesión"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span className="hidden sm:inline">Nuevo Equipo</span>
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cerrar sesión</span>
             </button>
 
             {/* La campana de notificaciones se retiró en la 5g.

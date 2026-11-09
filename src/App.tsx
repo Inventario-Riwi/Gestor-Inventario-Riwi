@@ -138,7 +138,6 @@ export function App() {
       setActiveTab={setActiveTab}
       searchTerm={searchTerm}
       setSearchTerm={setSearchTerm}
-      onOpenNewDeviceModal={() => setIsNewDeviceModalOpen(true)}
       onOpenOnboardingModal={() => setIsOnboardingModalOpen(true)}
       onCerrarSesion={handleCerrarSesion}
     />
