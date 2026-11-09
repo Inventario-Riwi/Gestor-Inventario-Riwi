@@ -576,6 +576,8 @@ export type MantenimientoConEquipo = Mantenimiento & {
   equipo_serial: string | null;
   equipo_marca: string | null;
   equipo_modelo: string | null;
+  /** `null` solo si el parte apunta a un equipo que ya no existe. */
+  equipo_categoria: CategoriaEquipo | null;
 };
 
 /**

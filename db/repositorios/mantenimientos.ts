@@ -63,6 +63,8 @@ export async function listar(f: FiltrosMantenimientos = {}, bd: BD = db) {
       equipo_serial: equipos.serial,
       equipo_marca: equipos.marca,
       equipo_modelo: equipos.modelo,
+      // Para nombrarlo: un periférico se llama por qué es + marca + modelo.
+      equipo_categoria: equipos.categoria,
     })
     .from(mantenimientos)
     .leftJoin(equipos, eq(equipos.id, mantenimientos.equipo_id))

@@ -6,6 +6,9 @@ import type { CategoriaEquipo } from '../types';
  * Lo leen el alta (`NewDeviceModal`) y la edición (`EditarEquipo`): si una
  * distinción importa, sale de un solo sitio, no de dos listas que se separan.
  *
+ * El serial del cargador ya no se ofrece en ningún tipo: se quitó de la
+ * pantalla a pedido. La columna sigue en la base con lo que ya tenga.
+ *
  * `etiqueta`, `serial`, empresa, sede, responsable, costo y notas van en todos
  * y no se repiten aquí. Un campo que un tipo no muestra no se borra: se queda
  * en la base como estuviera, y simplemente no se ofrece.
@@ -41,7 +44,6 @@ export const TIPOS: Record<
       'nombre_equipo',
       'marca',
       'modelo',
-      'serial_cargador',
       'procesador',
       'ram',
       'disco',

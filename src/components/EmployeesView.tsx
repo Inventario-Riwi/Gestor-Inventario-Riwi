@@ -24,6 +24,7 @@ import { useSondeo } from '../lib/sondeo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 import { SIN_GUARDAR, useConfirmacion } from './Confirmacion';
+import { nombreVisible } from '../lib/nombre-equipo';
 
 /**
  * Los 113 colaboradores reales, desde Postgres.
@@ -509,9 +510,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                               key={eq.id}
                               className="bg-surface-alt border border-line rounded px-2 py-1 flex items-center justify-between gap-2"
                             >
-                              <span className="truncate text-ink">
-                                {[eq.marca, eq.modelo].filter(Boolean).join(' ') || eq.categoria}
-                              </span>
+                              <span className="truncate text-ink">{nombreVisible(eq)}</span>
                               <span className="font-mono text-[10px] text-brand shrink-0">
                                 {eq.etiqueta ?? eq.serial ?? '—'}
                               </span>

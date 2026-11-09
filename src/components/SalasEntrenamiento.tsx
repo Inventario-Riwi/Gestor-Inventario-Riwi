@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, CircleAlert, MonitorSmartphone, Wrench } from 
 import type { EquipoDePuesto, PuestoSala, ResumenSala } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { useSondeo } from '../lib/sondeo';
+import { nombreVisible } from '../lib/nombre-equipo';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
 /**
@@ -277,7 +278,7 @@ const EnlaceEquipo: React.FC<{
   >
     <span className="font-mono text-brand text-xs flex items-center gap-1">
       {conModelo && <MonitorSmartphone className="w-3.5 h-3.5" />}
-      {equipo.etiqueta ?? equipo.serial ?? 'sin etiqueta'}
+      {equipo.etiqueta ?? (conModelo ? (equipo.serial ?? 'sin etiqueta') : nombreVisible(equipo))}
     </span>
     {conModelo && (
       <span className="block text-xs text-ink-muted">

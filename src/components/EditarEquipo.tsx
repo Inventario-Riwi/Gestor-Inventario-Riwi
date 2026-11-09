@@ -218,7 +218,6 @@ export const EditarEquipo: React.FC<{
         {texto('Serial', 'serial')}
         {lleva('marca') && texto('Marca', 'marca')}
         {lleva('modelo') && texto('Modelo', 'modelo')}
-        {lleva('serial_cargador') && texto('Serial del cargador', 'serial_cargador')}
         {lleva('imei') && texto('IMEI', 'imei', '15 dígitos')}
         {lista('Empresa', 'empresa', EMPRESAS)}
         {lista('Propiedad', 'propiedad', PROPIEDADES_EQUIPO)}

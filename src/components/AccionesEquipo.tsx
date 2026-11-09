@@ -12,6 +12,7 @@ import type {
 import { PRESTATARIOS } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { useConfirmacion } from './Confirmacion';
+import { nombreVisible } from '../lib/nombre-equipo';
 
 /**
  * Los botones de las mutaciones, en el detalle de un equipo.
@@ -207,7 +208,7 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       return;
     }
     setAbierta(null);
-    const quien = equipo.etiqueta ?? equipo.serial ?? equipo.categoria;
+    const quien = nombreVisible(equipo);
     const r = await preguntar({
       titulo: `¿${t.etiqueta} ${quien}?`,
       mensaje: t.irreversible ? (

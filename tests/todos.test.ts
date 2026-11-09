@@ -31,6 +31,7 @@ await import('./equipos.test.js');
 await import('./actas.test.js');
 await import('./mantenimiento.test.js');
 await import('./licencias.test.js');
+await import('./nombre-equipo.test.js');
 
 // El pool se cierra UNA vez y aquí, después de importar todas las suites.
 //

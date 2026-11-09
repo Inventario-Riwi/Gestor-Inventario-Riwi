@@ -4,6 +4,7 @@ import { AlertTriangle, Check, Loader2, PackageOpen, UserMinus, X } from 'lucide
 import type { EmpleadoConConteo, EquipoResumen, Sede } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { useConfirmacion } from './Confirmacion';
+import { nombreVisible } from '../lib/nombre-equipo';
 
 /**
  * Recoger los equipos de alguien que se va. **Es la operación contraria a
@@ -168,8 +169,7 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
     }
   };
 
-  const nombreEquipo = (e: EquipoResumen) =>
-    [e.marca, e.modelo].filter(Boolean).join(' ') || e.etiqueta || e.categoria;
+  const nombreEquipo = (e: EquipoResumen) => nombreVisible(e);
 
   return (
     <div className="fixed inset-0 bg-ink/30 z-50 flex items-center justify-center p-4">

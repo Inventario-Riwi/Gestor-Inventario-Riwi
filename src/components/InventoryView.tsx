@@ -26,6 +26,7 @@ import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-eq
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
 import { SalasEntrenamiento } from './SalasEntrenamiento';
+import { esPeriferico, identificador, nombreVisible } from '../lib/nombre-equipo';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
@@ -68,8 +69,8 @@ const colorEstado: Record<EstadoEquipo, string> = {
   Prestado: 'bg-info/20 text-ink border border-info/50',
 };
 
-const nombreDe = (e: EquipoConMotivos) =>
-  e.nombre_equipo ?? e.etiqueta ?? ([e.marca, e.modelo].filter(Boolean).join(' ') || 'Equipo');
+// Una sola regla para nombrar equipos: `lib/nombre-equipo.ts`.
+const nombreDe = (e: EquipoConMotivos) => nombreVisible(e);
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
   searchTerm,
@@ -664,7 +665,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         )}
                       </div>
                       <div className="text-xs text-ink-muted">
-                        {[e.marca, e.modelo].filter(Boolean).join(' ') || e.categoria}
+                        {/* Un periférico ya lleva marca y modelo en el nombre:
+                            debajo, lo que lo identifica físicamente. */}
+                        {esPeriferico(e.categoria)
+                          ? (identificador(e) ?? 'sin etiqueta ni serial')
+                          : [e.marca, e.modelo].filter(Boolean).join(' ') || e.categoria}
                         {/* La sala, cuando la hay (D48). Para un equipo que no
                             es de nadie, es la única forma de encontrarlo. */}
                         {e.ubicacion_detalle ? ` · ${e.ubicacion_detalle}` : ''}
@@ -966,7 +971,6 @@ const Detalle: React.FC<{
                 ['IMEI', equipo.imei, 'imei'],
                 ['Marca', equipo.marca],
                 ['Modelo', equipo.modelo],
-                ['Serial del cargador', equipo.serial_cargador, 'serial_cargador'],
                 ['Sede', sede],
                 ...(equipo.responsable_residencia
                   ? ([['Residencia del responsable', equipo.responsable_residencia]] as [string, string][])

@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { ESTADOS_PARTE_ABIERTO } from '../types';
 import { useSondeo } from '../lib/sondeo';
+import { nombreVisible } from '../lib/nombre-equipo';
 import { api, ErrorApi } from '../lib/api';
 import { Cargando, ErrorDeCarga, Vacio } from './EstadoCarga';
 
@@ -51,13 +52,19 @@ const colorEstado: Record<string, string> = {
 const CERRADOS = ['Devuelto', 'Baja tras revisión'];
 const esAbierto = (estado: string) => !CERRADOS.includes(estado);
 
+// Una sola regla para nombrar equipos: `lib/nombre-equipo.ts`.
 const nombreDe = (m: MantenimientoConEquipo) =>
-  m.equipo_nombre ??
-  m.equipo_etiqueta ??
-  ([m.equipo_marca, m.equipo_modelo].filter(Boolean).join(' ') || 'Equipo');
+  m.equipo_categoria
+    ? nombreVisible({
+        categoria: m.equipo_categoria,
+        nombre_equipo: m.equipo_nombre,
+        etiqueta: m.equipo_etiqueta,
+        marca: m.equipo_marca,
+        modelo: m.equipo_modelo,
+      })
+    : (m.equipo_etiqueta ?? 'Equipo');
 
-const nombreEquipo = (e: EquipoConMotivos) =>
-  e.nombre_equipo ?? e.etiqueta ?? ([e.marca, e.modelo].filter(Boolean).join(' ') || e.categoria);
+const nombreEquipo = (e: EquipoConMotivos) => nombreVisible(e);
 
 export const MaintenanceView: React.FC = () => {
   const [filas, setFilas] = useState<MantenimientoConEquipo[]>([]);
