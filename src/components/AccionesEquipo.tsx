@@ -140,6 +140,9 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
   // igual que decide cuáles son legales: una lista aquí sería otra vez la
   // segunda tabla contra la que avisa el bloque de arriba.
   const directas = posibles.filter((op) => de(op).disparo === 'directa');
+
+  /** El equipo está en la sede Remoto (sin ciudad): en casa de alguien. */
+  const enRemoto = sedes.some((s) => s.id === equipo.sede_id && s.ciudad === null);
   const porParte = posibles.filter((op) => de(op).disparo === 'parte');
 
   const ejecutar = async (op: Operacion) => {
@@ -148,7 +151,7 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
     try {
       let r;
       if (op === 'asignar') r = await api.asignar(equipo.id, empleadoId);
-      else if (op === 'devolver') r = await api.devolver(equipo.id);
+      else if (op === 'devolver') r = await api.devolver(equipo.id, null, enRemoto ? sedeId : null);
       else if (op === 'trasladar')
         r = await api.trasladar(equipo.id, sedeId, {
           transportadora: transportadora.trim() || null,
@@ -197,7 +200,9 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
   const pulsar = async (op: Operacion) => {
     setError(null);
     const t = de(op);
-    if (t.requiere) {
+    // Devolver lo que está en casa de un remoto pide a qué sede regresa: el
+    // formulario de abajo, cuyo botón ya es la confirmación.
+    if (t.requiere || (op === 'devolver' && enRemoto)) {
       setAbierta(op);
       return;
     }
@@ -395,6 +400,39 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       )}
 
       {/* Trasladar: hace falta a dónde, y los datos del envío son opcionales */}
+      {abierta === 'devolver' && enRemoto && (
+        <div className="bg-surface-alt border border-line rounded-lg p-3 space-y-2">
+          <label className="block text-xs font-medium text-ink">
+            El equipo está en casa de {equipo.responsable_nombre ?? 'su responsable'}. ¿A qué sede
+            regresa?
+          </label>
+          <select
+            value={sedeId}
+            onChange={(e) => setSedeId(e.target.value)}
+            className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-ink"
+          >
+            <option value="">Elegir sede…</option>
+            {sedes
+              .filter((s) => s.activa && s.ciudad !== null)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+          </select>
+          <p className="text-xs text-ink-muted">
+            Queda disponible y viajando hacia esa sede. Cuando llegue, se confirma desde Sedes.
+          </p>
+          <Botonera
+            enviando={enviando}
+            puede={Boolean(sedeId)}
+            onCancelar={() => setAbierta(null)}
+            onAceptar={() => void ejecutar('devolver')}
+            texto="Registrar devolución"
+          />
+        </div>
+      )}
+
       {abierta === 'trasladar' && (
         <div className="bg-surface-alt border border-line rounded-lg p-3 space-y-2">
           <label className="block text-xs font-medium text-ink">¿A qué sede va?</label>

@@ -138,6 +138,8 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
    * ocurrió. En pantalla no se llaman así — ver `ETIQUETA_MODO`.
    */
   const [modo, setModo] = useState<ModoActa>('ejecutar');
+  /** Devolución de alguien en remoto: a qué sede regresan sus equipos. */
+  const [sedeRegreso, setSedeRegreso] = useState('');
   /**
    * La sección 5 del acta (D41). **Ningún item arranca contestado.**
    *
@@ -313,6 +315,16 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
   }
 
   const empleado = empleados.find((e) => e.id === empleadoId) ?? null;
+  /**
+   * Devolver lo de un remoto en modo `ejecutar` pide a qué sede regresa: los
+   * equipos están en su casa y van a viajar. Firmar una devolución que ya
+   * ocurrió no lo pide, porque esa devolución ya dijo a dónde volvían.
+   */
+  const pideRegreso =
+    tipo === 'Devolución' &&
+    modo === 'ejecutar' &&
+    !!empleado &&
+    sedes.some((s) => s.id === empleado.sede_id && s.ciudad === null);
 
   /** Ya no hay `name` ni `specs`: el nombre se compone y las specs son columnas. */
   const nombreEquipo = (e: EquipoConMotivos) =>
@@ -481,6 +493,7 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
         // manda lo contestado tal cual, `null` incluido — el servidor no
         // rellena lo que falte y nosotros tampoco.
         chequeo: tipo === 'Entrega' ? CHEQUEO_ITEMS.map((i) => chequeo[i]) : null,
+        sede_regreso_id: pideRegreso ? sedeRegreso || null : null,
       });
       setEmitida(r.acta);
       setSeleccionados([]);
@@ -1053,6 +1066,31 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
             />
           )}
 
+          {pideRegreso && (
+            <label className="block text-xs text-ink space-y-1 border border-brand/30 bg-brand/5 rounded-lg p-3">
+              <span className="font-semibold">
+                {empleado?.nombre} trabaja en remoto: ¿a qué sede regresan los equipos? *
+              </span>
+              <select
+                value={sedeRegreso}
+                onChange={(e) => setSedeRegreso(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+              >
+                <option value="">Elegir sede…</option>
+                {sedes
+                  .filter((s) => s.activa && s.ciudad !== null)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+              </select>
+              <span className="block text-ink-muted">
+                Quedan viajando hacia esa sede hasta que confirmen que llegaron.
+              </span>
+            </label>
+          )}
+
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <p className="text-sm font-semibold text-ink">Registrar el acta</p>
@@ -1064,7 +1102,14 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
             </div>
             <button
               onClick={() => void emitir()}
-              disabled={emitiendo || !empleadoId || seleccionados.length === 0 || faltaEmpresa || sinFormato}
+              disabled={
+                emitiendo ||
+                !empleadoId ||
+                seleccionados.length === 0 ||
+                faltaEmpresa ||
+                sinFormato ||
+                (pideRegreso && !sedeRegreso)
+              }
               className="px-4 py-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shrink-0"
             >
               <FileSignature className="w-4 h-4" />

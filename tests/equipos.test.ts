@@ -34,6 +34,9 @@ import {
   movimientosDe,
   primeraSede,
   puestosEnSalaSql,
+  sedeDe,
+  sedePorNombre,
+  trasladoAbiertoDe,
   type Servidor,
   type UsuarioDePrueba,
 } from './ayuda.js';
@@ -1563,5 +1566,164 @@ describe('salas de entrenamiento: puestos y completos (0027)', () => {
     const r = await c.patch(`/api/equipos/${id}`, { mouse_sin_serial: true });
     assert.equal(r.estado, 200);
     assert.equal((await lista()).completo, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Remotos: el equipo asignado va donde vive la persona, y la sigue
+// ---------------------------------------------------------------------------
+//
+// Escrito desde la decisión del usuario: «el equipo que se le asigne debe
+// atarse a esa ubicación» y, ante un cambio de sede, «que lo sigan».
+
+describe('remotos: el equipo sigue a su responsable', () => {
+  const suite = ambito('remotos');
+  let admin: UsuarioDePrueba;
+  let oficina: string;
+  let remoto: string;
+  let persona: string;
+  let otra: string;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  const nuevoEquipo = async (etq: string) => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}${etq}`,
+      estado: 'Disponible',
+      sede_id: oficina,
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    return id;
+  };
+
+  const aRemoto = (id: string, ciudad: string) =>
+    c.patch(`/api/empleados/${id}`, {
+      sede_id: remoto,
+      pais: 'Colombia',
+      departamento: 'Atlántico',
+      ciudad,
+      direccion: 'Calle Ficticia 1',
+    });
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    oficina = await primeraSede();
+    remoto = await sedePorNombre('Remoto');
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+    persona = await crearEmpleado(`${suite.prefijo}Persona Remota`);
+    otra = await crearEmpleado(`${suite.prefijo}Otra Remota`);
+    assert.equal((await aRemoto(persona, 'Barranquilla')).estado, 200);
+    assert.equal((await aRemoto(otra, 'Soledad')).estado, 200);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await borrarEmpleados([persona, otra]);
+    await suite.limpiar();
+  });
+
+  it('asignar a un remoto lleva el equipo a Remoto, con un traslado confirmado', async () => {
+    const id = await nuevoEquipo('R1');
+    const r = await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(await sedeDe(id), remoto);
+    const movs = await movimientosDe(id);
+    const t = movs.find((m) => m.tipo === 'Traslado');
+    assert.ok(t, 'no quedó el traslado en el historial');
+    assert.equal(t.sede_destino_id, remoto);
+    assert.equal(await trasladoAbiertoDe(id), null, 'el traslado nace confirmado');
+  });
+
+  it('asignar a alguien de oficina no mueve el equipo (el otro lado)', async () => {
+    const id = await nuevoEquipo('R-OFI');
+    const deOficina = await crearEmpleado(`${suite.prefijo}Persona Oficina`);
+    try {
+      const r = await c.post(`/api/equipos/${id}/asignar`, { empleado_id: deOficina });
+      assert.equal(r.estado, 200);
+      assert.equal(await sedeDe(id), oficina);
+      assert.ok(!(await movimientosDe(id)).some((m) => m.tipo === 'Traslado'));
+      await c.post(`/api/equipos/${id}/devolver`, {});
+    } finally {
+      await borrarEquipos([id]);
+      creados.splice(creados.indexOf(id), 1);
+      await borrarEmpleados([deOficina]);
+    }
+  });
+
+  it('el listado y la ficha dicen dónde vive el responsable', async () => {
+    const id = await nuevoEquipo('R2');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    const f = (await c.get(`/api/equipos/${id}`)).cuerpo as {
+      equipo: { responsable_residencia: string | null };
+    };
+    assert.match(f.equipo.responsable_residencia ?? '', /Barranquilla.*Calle Ficticia 1/);
+  });
+
+  it('devolver lo de un remoto sin decir a qué sede regresa es 400 y no cambia nada', async () => {
+    const id = await nuevoEquipo('R3');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    const r = await c.post(`/api/equipos/${id}/devolver`, {});
+    assert.equal(r.estado, 400);
+    assert.equal(await estadoDe(id), 'Asignado');
+    assert.equal(await sedeDe(id), remoto);
+  });
+
+  it('devolver con sede deja el equipo viajando hacia ella, y llega al confirmar', async () => {
+    const id = await nuevoEquipo('R4');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    const r = await c.post(`/api/equipos/${id}/devolver`, { sede_destino_id: oficina });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(await estadoDe(id), 'Disponible');
+    assert.equal(await sedeDe(id), remoto, 'sigue en Remoto hasta que llegue');
+    const abierto = await trasladoAbiertoDe(id);
+    assert.ok(abierto, 'no abrió el traslado de regreso');
+    assert.equal(abierto.sede_destino_id, oficina);
+    const ok = await c.post(`/api/movimientos/${abierto.id}/confirmar`, {});
+    assert.equal(ok.estado, 200, JSON.stringify(ok.cuerpo));
+    assert.equal(await sedeDe(id), oficina);
+  });
+
+  it('reasignar de un remoto a otro no pide sede: pasa de mano en mano', async () => {
+    const id = await nuevoEquipo('R5');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    const r = await c.post(`/api/equipos/${id}/reasignar`, { empleado_id: otra });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(await sedeDe(id), remoto);
+    assert.equal(await trasladoAbiertoDe(id), null);
+  });
+
+  it('si la persona pasa a una oficina, sus equipos van con ella', async () => {
+    const id = await nuevoEquipo('R6');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: otra });
+    assert.equal(await sedeDe(id), remoto);
+    const r = await c.patch(`/api/empleados/${otra}`, { sede_id: oficina });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(await sedeDe(id), oficina);
+    const ultimo = (await movimientosDe(id)).filter((m) => m.tipo === 'Traslado').at(-1);
+    assert.equal(ultimo?.sede_destino_id, oficina);
+    // Y de vuelta a Remoto, para el resto de la suite.
+    assert.equal((await aRemoto(otra, 'Soledad')).estado, 200);
+    assert.equal(await sedeDe(id), remoto);
+  });
+
+  it('si un equipo suyo está viajando, el cambio de sede es 409 y no cambia nada', async () => {
+    const id = await nuevoEquipo('R7');
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    // Un traslado abierto a mano, desde la ficha del equipo.
+    const t = await c.post(`/api/equipos/${id}/trasladar`, { sede_destino_id: oficina });
+    assert.equal(t.estado, 200, JSON.stringify(t.cuerpo));
+    const r = await c.patch(`/api/empleados/${persona}`, { sede_id: oficina });
+    assert.equal(r.estado, 409);
+    const ficha = (await c.get(`/api/empleados/${persona}`)).cuerpo as {
+      empleado: { sede_id: string };
+    };
+    assert.equal(ficha.empleado.sede_id, remoto, 'la ficha no cambió');
+    // Se cierra el traslado para que no ensucie a las demás pruebas.
+    const abierto = await trasladoAbiertoDe(id);
+    if (abierto) await c.post(`/api/movimientos/${abierto.id}/confirmar`, {});
   });
 });

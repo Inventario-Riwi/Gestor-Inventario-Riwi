@@ -20,7 +20,7 @@
  * un `.select()` sin argumentos. El comentario avisa; el test es lo que impide.
  */
 
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db, type BD, type Ejecutor } from '../cliente.js';
 import { descifrar } from '../cifrado.js';
@@ -622,6 +622,7 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
   // en la consulta principal la haría depender de que drizzle recalifique bien.
   const idsEmpleado = [...new Set(filas.map((f) => f.empleado_id).filter((x): x is string => !!x))];
   const nombrePorId = new Map<string, string>();
+  const residenciaPorId = await residencias(idsEmpleado, bd);
   if (idsEmpleado.length > 0) {
     const personas = await bd
       .select({ id: empleados.id, nombre: empleados.nombre })
@@ -635,6 +636,7 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
       ...f,
       motivos_revision: porEquipo.get(f.id) ?? [],
       responsable_nombre: f.empleado_id ? (nombrePorId.get(f.empleado_id) ?? null) : null,
+      responsable_residencia: f.empleado_id ? (residenciaPorId.get(f.empleado_id) ?? null) : null,
     })),
     total,
     pagina,
@@ -744,7 +746,44 @@ export async function porId(id: string, bd: BD = db) {
     .select({ codigo: equiposMotivosRevision.motivo_codigo })
     .from(equiposMotivosRevision)
     .where(eq(equiposMotivosRevision.equipo_id, id));
-  return { ...fila, motivos_revision: motivos.map((m) => m.codigo) };
+  const residencia = fila.empleado_id
+    ? ((await residencias([fila.empleado_id], bd)).get(fila.empleado_id) ?? null)
+    : null;
+  return {
+    ...fila,
+    motivos_revision: motivos.map((m) => m.codigo),
+    responsable_residencia: residencia,
+  };
+}
+
+/**
+ * Dónde vive cada persona que trabaja en remoto: «Barranquilla, Atlántico —
+ * Cra 45 #12-30». Solo las que tienen ciudad, que son las de Remoto (0022: al
+ * salir de Remoto se borra).
+ *
+ * Se lee de la persona y NO se copia al equipo: si se muda y le cambian la
+ * ficha, sus equipos dicen la dirección nueva sin que nadie los toque.
+ */
+async function residencias(ids: string[], bd: BD = db): Promise<Map<string, string>> {
+  const salida = new Map<string, string>();
+  if (ids.length === 0) return salida;
+  const filas = await bd
+    .select({
+      id: empleados.id,
+      ciudad: empleados.ciudad,
+      departamento: empleados.departamento,
+      pais: empleados.pais,
+      direccion: empleados.direccion,
+    })
+    .from(empleados)
+    .where(and(inArray(empleados.id, ids), isNotNull(empleados.ciudad)));
+  for (const f of filas) {
+    const lugar = [f.ciudad, f.departamento, f.pais === 'Estados Unidos' ? f.pais : null]
+      .filter(Boolean)
+      .join(', ');
+    salida.set(f.id, f.direccion ? `${lugar} — ${f.direccion}` : lugar);
+  }
+  return salida;
 }
 
 /**

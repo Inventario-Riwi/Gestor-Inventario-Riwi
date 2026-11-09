@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { CHEQUEO_ITEMS } from '../../db/acta-formato.js';
 import * as repoActas from '../../db/repositorios/actas.js';
+import * as repoMovimientos from '../../db/repositorios/movimientos.js';
 import { guardian } from '../autenticar.js';
 import { asincrono, ErrorHttp, noEncontrado } from '../errores.js';
 import { ruta } from '../permisos.js';
@@ -38,6 +39,8 @@ const esquemaEmitir = z.object({
     .max(50)
     .refine((v) => new Set(v).size === v.length, { message: 'hay un equipo repetido' }),
   observaciones: z.string().trim().max(2000).nullable().optional(),
+  /** Devolución de un remoto en modo `ejecutar`: a qué sede regresan los equipos. */
+  sede_regreso_id: uuid.nullable().optional(),
   /**
    * La sección 5 (D41). Solo cuenta en las entregas; el repositorio la
    * descarta en una devolución, cuyo formato no tiene esa sección.
@@ -202,6 +205,11 @@ export function registrarRutasActas(app: Express): void {
         // es algo que era cierto ayer y puede serlo mañana.
         if (e instanceof repoActas.SinMovimientoQueDocumentar) {
           throw new ErrorHttp(409, e.message);
+        }
+        // Un dato que falta para mover el equipo (la sede a la que regresa
+        // lo de un remoto): la petición está incompleta, no el estado mal.
+        if (e instanceof repoMovimientos.FaltaDato) {
+          throw new ErrorHttp(400, e.message);
         }
 
         // Los dos del modo `ejecutar`. Los dos dicen QUÉ EQUIPO: un 409 que

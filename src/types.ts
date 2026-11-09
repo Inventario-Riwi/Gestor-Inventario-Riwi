@@ -104,6 +104,11 @@ export type EquipoConMotivos = Equipo & {
    * ficha suelta no, y por eso es opcional en vez de afirmar que siempre está.
    */
   responsable_nombre?: string | null;
+  /**
+   * Si el responsable trabaja en remoto: su ciudad y dirección. Se lee de la
+   * persona, no se guarda en el equipo: si se muda, el equipo la sigue.
+   */
+  responsable_residencia?: string | null;
 };
 
 /** Lo que devuelve `GET /api/empleados/:id/equipos`. */

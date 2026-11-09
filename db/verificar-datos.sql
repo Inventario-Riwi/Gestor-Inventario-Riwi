@@ -612,6 +612,20 @@ SELECT 'S', 'parte de un puesto de CE fuera de CE', count(*)
 FROM equipos parte JOIN equipos torre ON parte.equipo_principal_id = torre.id
 WHERE torre.centro_entrenamiento AND NOT parte.centro_entrenamiento;
 
+-- Remotos: un equipo que la aplicación le asignó a alguien en Remoto está en
+-- Remoto. Lo deja así `mutar` al asignar, y `moverEquiposConResponsable`
+-- cuando la persona cambia de sede. Solo los que tienen alguna Asignación: lo
+-- que el importador trajo a nombre de alguien entra con un Alta, y su sede es
+-- la que decía el archivo.
+INSERT INTO hallazgo
+SELECT 'S', 'equipo asignado a un remoto que no esta en Remoto', count(*)
+FROM equipos e
+JOIN empleados p ON p.id = e.empleado_id
+JOIN sedes sp ON sp.id = p.sede_id AND sp.ciudad IS NULL
+WHERE e.estado = 'Asignado'
+  AND e.sede_id IS DISTINCT FROM p.sede_id
+  AND EXISTS (SELECT 1 FROM movimientos m WHERE m.equipo_id = e.id AND m.tipo = 'Asignación');
+
 -- Salas de entrenamiento: un puesto está entero en una sala. Una pantalla
 -- ligada a un computador de «P3 OCCI» que dice estar en «P4 ORI» haría que la
 -- tarjeta de una sala contara una pantalla que físicamente está en otra.

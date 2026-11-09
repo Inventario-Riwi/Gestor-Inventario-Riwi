@@ -5,7 +5,7 @@
 
 import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 
-import { db, type BD } from '../cliente.js';
+import { db, type BD, type Ejecutor } from '../cliente.js';
 import { empleados, equipos } from '../esquema.js';
 
 const CAMPOS_PUBLICOS = {
@@ -139,7 +139,9 @@ export async function crear(datos: typeof empleados.$inferInsert, bd: BD = db) {
 export async function actualizar(
   id: string,
   datos: Partial<typeof empleados.$inferInsert>,
-  bd: BD = db,
+  // `Ejecutor`: la ruta lo llama dentro de la transacción que también mueve
+  // los equipos de la persona cuando cambia de sede.
+  bd: Ejecutor = db,
 ) {
   const [fila] = await bd
     .update(empleados)

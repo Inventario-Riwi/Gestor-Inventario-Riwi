@@ -700,6 +700,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     </td>
                     <td className="px-4 py-3 text-ink-muted">
                       {nombreSede(e.sede_id)}
+                      {/* Remoto: dónde vive quien lo tiene. */}
+                      {e.responsable_residencia && (
+                        <div className="text-[11px] text-ink-muted max-w-[16rem] truncate" title={e.responsable_residencia}>
+                          {e.responsable_residencia}
+                        </div>
+                      )}
                       {/* 0024. CE y su sala, a la vista: es lo primero que se
                           pregunta de un puesto de entrenamiento. */}
                       {e.centro_entrenamiento && (
@@ -962,6 +968,9 @@ const Detalle: React.FC<{
                 ['Modelo', equipo.modelo],
                 ['Serial del cargador', equipo.serial_cargador, 'serial_cargador'],
                 ['Sede', sede],
+                ...(equipo.responsable_residencia
+                  ? ([['Residencia del responsable', equipo.responsable_residencia]] as [string, string][])
+                  : []),
                 ['Empresa', etiquetaEmpresa(equipo.empresa)],
                 ['Prestado a', equipo.prestado_a && etiquetaEmpresa(equipo.prestado_a)],
                 ['Propiedad', equipo.propiedad],

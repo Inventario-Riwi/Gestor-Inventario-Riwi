@@ -808,8 +808,15 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
             ))}
           </select>
         </label>
+        {!esRemota && campo('Dirección', 'direccion', { ancho: true })}
         {esRemota && (
-          <>
+          <fieldset className="md:col-span-2 border border-brand/30 bg-brand/5 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+            <legend className="px-1 text-xs font-semibold text-ink">
+              Residencia (trabaja en remoto)
+            </legend>
+            <p className="md:col-span-2 text-[11px] text-ink-muted">
+              Los equipos que se le asignen quedan en esta ubicación, y la siguen si se muda.
+            </p>
             {/* 0022. Dónde está el remoto. Solo el país es lista: los
                 municipios se escriben a mano. */}
             <label className="text-xs text-ink-muted space-y-1">
@@ -832,9 +839,9 @@ export const FormularioEmpleado: React.FC<FormularioEmpleadoProps> = ({
               'departamento',
             )}
             {campo('Ciudad o municipio *', 'ciudad', { ancho: true })}
-          </>
+            {campo('Dirección de residencia *', 'direccion', { ancho: true })}
+          </fieldset>
         )}
-        {campo(esRemota ? 'Dirección *' : 'Dirección', 'direccion', { ancho: true })}
       </div>
 
       {bloqueaRemoto && (

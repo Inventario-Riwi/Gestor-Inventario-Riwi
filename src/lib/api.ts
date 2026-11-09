@@ -349,10 +349,20 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ empleado_id: empleadoId }) },
     ),
 
-  devolver: (equipoId: string, observaciones?: string | null) =>
+  /**
+   * `sedeRegreso`: si el equipo estaba en casa de alguien en remoto, a qué
+   * sede vuelve. El servidor lo exige en ese caso y abre el traslado.
+   */
+  devolver: (equipoId: string, observaciones?: string | null, sedeRegreso?: string | null) =>
     pedir<{ equipo: EquipoConMotivos; movimiento: Movimiento }>(
       `/api/equipos/${equipoId}/devolver`,
-      { method: 'POST', body: JSON.stringify({ observaciones: observaciones ?? null }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          observaciones: observaciones ?? null,
+          ...(sedeRegreso ? { sede_destino_id: sedeRegreso } : {}),
+        }),
+      },
     ),
 
   trasladar: (
@@ -447,6 +457,8 @@ export const api = {
      * filas y la instantánea tiene que decir lo mismo que el documento.
      */
     chequeo?: ItemChequeo[] | null;
+    /** Devolución de un remoto en modo `ejecutar`: a qué sede regresan. */
+    sede_regreso_id?: string | null;
   }) =>
     pedir<{ acta: ActaEmitida }>('/api/actas', {
       method: 'POST',

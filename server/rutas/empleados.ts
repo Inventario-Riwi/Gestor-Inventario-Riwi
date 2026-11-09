@@ -8,7 +8,9 @@
 import type { Express } from 'express';
 import { z } from 'zod';
 
+import { db } from '../../db/cliente.js';
 import * as repoEmpleados from '../../db/repositorios/empleados.js';
+import * as repoMovimientos from '../../db/repositorios/movimientos.js';
 import * as repoSedes from '../../db/repositorios/sedes.js';
 import { empresaEmpleado, estadoEmpleado, pais } from '../../db/esquema.js';
 import { guardian } from '../autenticar.js';
@@ -260,10 +262,33 @@ export function registrarRutasEmpleados(app: Express): void {
         }
       }
 
-      const actualizado = await repoEmpleados.actualizar(
-        id,
-        await aplicarReglasDeSede(datos, empleado),
-      );
+      const final = await aplicarReglasDeSede(datos, empleado);
+      const usuarioId = req.usuario?.id;
+      if (!usuarioId) throw new ErrorHttp(401, 'Sesión requerida');
+
+      /**
+       * Cambiar de sede a alguien con equipos asignados se los lleva: un
+       * traslado confirmado por equipo, en la MISMA transacción que la ficha.
+       * Si uno está viajando, no cambia nada —ni la ficha ni los equipos— y
+       * el 409 dice cuál.
+       */
+      const cambiaSede = final.sede_id !== undefined && final.sede_id !== empleado.sede_id;
+      let actualizado;
+      try {
+        actualizado = await db.transaction(async (tx) => {
+          const fila = await repoEmpleados.actualizar(id, final, tx);
+          if (fila && cambiaSede) {
+            await repoMovimientos.moverEquiposConResponsable(tx, id, final.sede_id ?? null, {
+              usuarioId,
+              ip: req.ip ?? null,
+            });
+          }
+          return fila;
+        });
+      } catch (e) {
+        if (e instanceof repoMovimientos.EquipoEnTraslado) throw new ErrorHttp(409, e.message);
+        throw e;
+      }
       if (!actualizado) throw noEncontrado('Empleado');
       res.json({ empleado: actualizado });
     }),

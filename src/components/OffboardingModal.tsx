@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Check, Loader2, PackageOpen, UserMinus, X } from 'lucide-react';
 
-import type { EmpleadoConConteo, EquipoResumen } from '../types';
+import type { EmpleadoConConteo, EquipoResumen, Sede } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { useConfirmacion } from './Confirmacion';
 
@@ -54,6 +54,13 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
   const [enviando, setEnviando] = useState(false);
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
 
+  // Antes de cualquier `return`: un hook detrás del return temprano cambia el
+  // número de hooks entre el render cerrado y el abierto, y React se rompe.
+  const [ventana, preguntar] = useConfirmacion();
+  /** Las sedes, para elegir a cuál regresan los equipos de un remoto. */
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [sedeRegreso, setSedeRegreso] = useState('');
+
   const [desactivando, setDesactivando] = useState(false);
   const [desactivado, setDesactivado] = useState(false);
   const [errorDesactivar, setErrorDesactivar] = useState<string | null>(null);
@@ -78,6 +85,11 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSedeRegreso('');
+    api.sedes().then(
+      (r) => setSedes(r.sedes),
+      () => setSedes([]),
+    );
     setResultados(null);
     setDesactivado(false);
     setErrorDesactivar(null);
@@ -89,12 +101,14 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
   const alternar = (id: string) =>
     setMarcados((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]));
 
+  /** Los marcados que están en casa de la persona (sede Remoto, sin ciudad). */
+  const remotas = new Set(sedes.filter((s) => s.ciudad === null).map((s) => s.id));
+  const hayRemotos = equipos.some((e) => marcados.includes(e.id) && e.sede_id && remotas.has(e.sede_id));
+
   /** Los que quedan a su nombre después de esta ronda. */
   const pendientes = resultados
     ? equipos.filter((e) => !resultados.some((r) => r.equipo.id === e.id && r.ok)).length
     : equipos.length;
-
-  const [ventana, preguntar] = useConfirmacion();
 
   const devolver = async () => {
     const n = marcados.length;
@@ -109,7 +123,12 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
 
     for (const equipo of equipos.filter((e) => marcados.includes(e.id))) {
       try {
-        await api.devolver(equipo.id, `Offboarding de ${empleado.nombre}`);
+        const enCasa = !!equipo.sede_id && remotas.has(equipo.sede_id);
+        await api.devolver(
+          equipo.id,
+          `Offboarding de ${empleado.nombre}`,
+          enCasa ? sedeRegreso : null,
+        );
         hechos.push({ equipo, ok: true, detalle: 'Devuelto · vuelve a Disponible' });
       } catch (e) {
         hechos.push({
@@ -329,6 +348,31 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
               </p>
             )}
 
+            {hayRemotos && (
+              <label className="block text-xs text-ink space-y-1">
+                <span className="font-medium">
+                  Trabaja en remoto: ¿a qué sede regresan sus equipos? *
+                </span>
+                <select
+                  value={sedeRegreso}
+                  onChange={(e) => setSedeRegreso(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+                >
+                  <option value="">Elegir sede…</option>
+                  {sedes
+                    .filter((s) => s.activa && s.ciudad !== null)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nombre}
+                      </option>
+                    ))}
+                </select>
+                <span className="block text-ink-muted">
+                  Quedan viajando hacia esa sede hasta que confirmen que llegaron.
+                </span>
+              </label>
+            )}
+
             <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={onClose}
@@ -339,7 +383,7 @@ export const OffboardingModal: React.FC<OffboardingModalProps> = ({
               </button>
               <button
                 onClick={() => void devolver()}
-                disabled={enviando || marcados.length === 0}
+                disabled={enviando || marcados.length === 0 || (hayRemotos && !sedeRegreso)}
                 className="px-4 py-2 text-sm bg-brand text-white rounded-lg font-medium hover:bg-brand-hover disabled:opacity-50 flex items-center gap-1.5"
               >
                 {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageOpen className="w-4 h-4" />}

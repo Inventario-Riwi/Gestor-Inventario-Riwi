@@ -50,6 +50,12 @@ export interface DatosMutacion {
   transportadora?: string | null;
   guia?: string | null;
   fecha_estimada?: string | null;
+  /**
+   * Interno: la operación es un paso de `reasignar`. La devolución de en medio
+   * no vuelve a ninguna sede —el equipo pasa de mano en mano—, así que no pide
+   * a dónde regresa. No lo acepta la API: lo pone la cadena.
+   */
+  en_cadena?: boolean;
 }
 
 export class EquipoNoEncontrado extends Error {}
@@ -180,7 +186,7 @@ export async function mutar(
 
       let ultimo!: ResultadoMutacion;
       for (const paso of t.compuesta) {
-        ultimo = await mutar(paso, equipoId, datos, contexto, tx);
+        ultimo = await mutar(paso, equipoId, { ...datos, en_cadena: true }, contexto, tx);
       }
 
       // También aquí, y no solo en la rama de abajo.
@@ -202,6 +208,57 @@ export async function mutar(
     }
     if (t.requiere === 'prestatario' && !datos.prestado_a) {
       throw new FaltaDato('Hay que decir a qué empresa se le presta el equipo.');
+    }
+
+    // -----------------------------------------------------------------------
+    // 0. Remotos: el equipo va donde vive su responsable
+    // -----------------------------------------------------------------------
+    //
+    // Se decide aquí, ANTES de escribir nada, para que un dato que falta sea
+    // un 400 limpio y no media operación deshecha.
+    //
+    // - Asignar a alguien en Remoto lleva el equipo a la sede Remoto: se le
+    //   entrega en su casa. Queda como un Traslado ya confirmado, porque
+    //   `verificar-datos.sql` §F2 exige que la sede de un equipo sea el destino
+    //   de su último traslado confirmado, y porque el historial tiene que
+    //   decir que el equipo se fue de la oficina.
+    // - Devolver un equipo que está en Remoto pide a qué sede regresa, y deja
+    //   un traslado ABIERTO hacia ella: está viajando hasta que la sede
+    //   confirme que llegó. Sin esto quedaría «Disponible» en casa de alguien
+    //   que ya no lo tiene, que es un equipo perdido.
+    const remota = await sedeRemota(tx);
+    const empleadoDestino =
+      operacion === 'asignar' && datos.empleado_id
+        ? (
+            await tx
+              .select({ sede_id: empleados.sede_id })
+              .from(empleados)
+              .where(eq(empleados.id, datos.empleado_id))
+          )[0]
+        : undefined;
+    const vaARemoto =
+      remota !== null &&
+      empleadoDestino?.sede_id === remota &&
+      actual.sede_id !== remota;
+    const vuelveDeRemoto =
+      remota !== null && operacion === 'devolver' && !datos.en_cadena && actual.sede_id === remota;
+
+    if (vaARemoto || vuelveDeRemoto) {
+      if (await tieneTrasladoAbierto(tx, equipoId)) {
+        throw new FaltaDato(
+          'El equipo tiene un traslado en curso. Hay que confirmar su llegada antes de moverlo otra vez.',
+        );
+      }
+    }
+    if (vuelveDeRemoto) {
+      if (!datos.sede_destino_id) {
+        throw new FaltaDato(
+          'El equipo estaba en casa de alguien en remoto: hay que decir a qué sede regresa.',
+        );
+      }
+      if (datos.sede_destino_id === remota) {
+        throw new FaltaDato('El equipo regresa a una oficina, no a «Remoto».');
+      }
     }
 
     const antes: Antes = {
@@ -269,6 +326,21 @@ export async function mutar(
       })
       .returning({ id: movimientos.id, tipo: movimientos.tipo, fecha: movimientos.fecha });
 
+    // 2b. El viaje del remoto, decidido en el paso 0.
+    if (vaARemoto && remota) {
+      await trasladar(tx, equipoId, actual.sede_id, remota, contexto, {
+        confirmado: true,
+        observaciones: 'Entregado en la residencia de la persona (trabaja en remoto).',
+      });
+      despues = { ...despues, sede_id: remota };
+    }
+    if (vuelveDeRemoto && datos.sede_destino_id) {
+      await trasladar(tx, equipoId, actual.sede_id, datos.sede_destino_id, contexto, {
+        confirmado: false,
+        observaciones: 'Regresa de la residencia de un remoto tras la devolución.',
+      });
+    }
+
     // -----------------------------------------------------------------------
     // 3. La auditoría, aquí y no después
     // -----------------------------------------------------------------------
@@ -304,6 +376,132 @@ export async function mutar(
 
     return { movimiento, antes, despues, motivos_retirados: motivosRetirados };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Remotos: la ubicación del equipo sigue a la de su responsable
+// ---------------------------------------------------------------------------
+
+type Tx = Parameters<Parameters<BD['transaction']>[0]>[0];
+
+/**
+ * El id de la sede «Remoto», o `null` si no existe. Se reconoce por no tener
+ * ciudad —la semilla lo dice: «Remoto no es un lugar»—, no por el nombre, que
+ * es lo mismo que hace la ficha del colaborador.
+ */
+async function sedeRemota(tx: Ejecutor): Promise<string | null> {
+  const [fila] = await tx
+    .select({ id: sedes.id })
+    .from(sedes)
+    .where(isNull(sedes.ciudad))
+    .limit(1);
+  return fila?.id ?? null;
+}
+
+async function tieneTrasladoAbierto(tx: Ejecutor, equipoId: string): Promise<boolean> {
+  const [fila] = await tx
+    .select({ id: movimientos.id })
+    .from(movimientos)
+    .where(
+      and(
+        eq(movimientos.equipo_id, equipoId),
+        eq(movimientos.tipo, 'Traslado'),
+        isNull(movimientos.fecha_confirmacion),
+      ),
+    )
+    .limit(1);
+  return Boolean(fila);
+}
+
+/**
+ * Un Traslado escrito por la aplicación, no pedido a mano.
+ *
+ * `confirmado`: el equipo ya está allí —se le entregó en la mano a quien
+ * vive en ese sitio—, así que el traslado nace cerrado y la sede se mueve en
+ * el acto. Sin confirmar, queda viajando y la sede cambia al confirmar la
+ * llegada, como cualquier traslado (D13).
+ */
+async function trasladar(
+  tx: Tx,
+  equipoId: string,
+  origen: string | null,
+  destino: string,
+  contexto: { usuarioId: string; ip: string | null },
+  opciones: { confirmado: boolean; observaciones: string },
+) {
+  if (origen === destino) return;
+  const [mov] = await tx
+    .insert(movimientos)
+    .values({
+      equipo_id: equipoId,
+      tipo: 'Traslado',
+      sede_origen_id: origen,
+      sede_destino_id: destino,
+      usuario_app_id: contexto.usuarioId,
+      observaciones: opciones.observaciones,
+      fecha_confirmacion: opciones.confirmado ? sql`now()` : null,
+    })
+    .returning({ id: movimientos.id });
+  if (opciones.confirmado) {
+    await tx.update(equipos).set({ sede_id: destino }).where(eq(equipos.id, equipoId));
+  }
+  await repoAuditoria.registrar(
+    {
+      tabla: 'equipos',
+      registro_id: equipoId,
+      accion: opciones.confirmado ? 'seguir_al_responsable' : 'regresar_de_remoto',
+      usuario_app_id: contexto.usuarioId,
+      ip: contexto.ip,
+      antes: { sede_id: origen },
+      despues: { sede_id: opciones.confirmado ? destino : origen, movimiento_id: mov.id },
+    },
+    tx,
+  );
+}
+
+/** Un equipo del responsable no se pudo mover porque ya estaba viajando. */
+export class EquipoEnTraslado extends Error {
+  constructor(public readonly etiquetas: string[]) {
+    super(
+      `No se puede cambiar la sede: ${etiquetas.join(', ')} tiene${etiquetas.length === 1 ? '' : 'n'} un traslado en curso. Hay que confirmarlo primero.`,
+    );
+  }
+}
+
+/**
+ * Cuando una persona cambia de sede, sus equipos asignados van con ella: un
+ * Traslado confirmado por cada uno, en la transacción que se le pase —la misma
+ * que cambia la ficha—. Si alguno está viajando, no se mueve ninguno.
+ *
+ * Devuelve cuántos movió.
+ */
+export async function moverEquiposConResponsable(
+  tx: Tx,
+  empleadoId: string,
+  nuevaSede: string | null,
+  contexto: { usuarioId: string; ip: string | null },
+): Promise<number> {
+  if (!nuevaSede) return 0;
+  const suyos = await tx
+    .select({ id: equipos.id, sede_id: equipos.sede_id, etiqueta: equipos.etiqueta, serial: equipos.serial })
+    .from(equipos)
+    .where(and(eq(equipos.empleado_id, empleadoId), eq(equipos.estado, 'Asignado')))
+    .for('update');
+  const aMover = suyos.filter((e) => e.sede_id !== nuevaSede);
+
+  const viajando: string[] = [];
+  for (const e of aMover) {
+    if (await tieneTrasladoAbierto(tx, e.id)) viajando.push(e.etiqueta ?? e.serial ?? e.id);
+  }
+  if (viajando.length > 0) throw new EquipoEnTraslado(viajando);
+
+  for (const e of aMover) {
+    await trasladar(tx, e.id, e.sede_id, nuevaSede, contexto, {
+      confirmado: true,
+      observaciones: 'Acompaña a su responsable, que cambió de sede.',
+    });
+  }
+  return aMover.length;
 }
 
 /**

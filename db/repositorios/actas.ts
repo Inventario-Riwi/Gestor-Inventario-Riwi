@@ -177,6 +177,11 @@ export interface DatosActa {
   equipos: string[];
   observaciones?: string | null;
   /**
+   * Devolución en modo `ejecutar` de alguien en remoto: a qué sede regresan
+   * los equipos. Sin ella, `mutar` responde que falta el dato.
+   */
+  sede_regreso_id?: string | null;
+  /**
    * Las respuestas de la sección 5 (D41). Solo se guardan en las entregas.
    *
    * Lo que no venga queda `instalado: null` — «nadie contestó», que es una
@@ -317,6 +322,7 @@ async function ejecutarOperacion(
   persona: Persona,
   contexto: { usuarioId: string; ip: string | null },
   observaciones: string | null,
+  sedeRegreso: string | null = null,
 ): Promise<string> {
   // Devolver exige que el equipo esté a nombre de ESA persona. Sin esto,
   // `mutar` escribiría el movimiento con el titular real y el acta diría otra
@@ -346,7 +352,7 @@ async function ejecutarOperacion(
     const r = await repoMovimientos.mutar(
       OPERACION_DE[tipo],
       eq_.id,
-      { empleado_id: persona.id, observaciones },
+      { empleado_id: persona.id, observaciones, sede_destino_id: sedeRegreso },
       contexto,
       tx,
     );
@@ -473,6 +479,7 @@ export async function emitir(
               persona,
               contexto,
               datos.observaciones ?? null,
+              datos.sede_regreso_id ?? null,
             )
           : await buscarMovimiento(tx, tipoMov, equipoId, nombreEq, persona);
 
