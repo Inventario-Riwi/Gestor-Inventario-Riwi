@@ -174,7 +174,7 @@ export function App() {
 
           {/* Confirmar un traslado cambia el badge del sidebar, que se pinta
               fuera de la vista: por eso avisa hacia arriba. */}
-          {activeTab === 'logistics' && <SedesView onTrasladoConfirmado={recargarResumen} />}
+          {activeTab === 'logistics' && <SedesView onTrasladoConfirmado={recargarResumen} esAdmin={usuario.rol === 'admin'} />}
 
           {/* Conectada: se pide sus datos ella sola. */}
           {activeTab === 'employees' && (

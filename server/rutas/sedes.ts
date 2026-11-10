@@ -68,14 +68,27 @@ export function registrarRutasSedes(app: Express): void {
     }),
   );
 
+  /**
+   * Crear una sede: solo admin, y **con ciudad**.
+   *
+   * La ciudad no es opcional aquí aunque la columna la admita vacía: una sede
+   * sin ciudad es como la app reconoce a «Remoto» (la semilla, la ficha del
+   * colaborador y `sedeRemota()` lo hacen así). Una «Armenia» sin ciudad se
+   * volvería un segundo Remoto, y los equipos de quien viva allí irían a parar
+   * a cualquiera de los dos.
+   */
   ruta(
     app,
     'post',
     '/api/sedes',
-    'autenticado',
+    'admin',
     guardian,
     asincrono(async (req, res) => {
-      res.status(201).json({ sede: await repoSedes.crear(validar(campos, req.body)) });
+      const datos = validar(
+        campos.extend({ ciudad: z.string().trim().min(1, { message: 'la ciudad es obligatoria' }).max(120) }),
+        req.body,
+      );
+      res.status(201).json({ sede: await repoSedes.crear(datos) });
     }),
   );
 

@@ -1119,3 +1119,46 @@ export async function puestosDeSala(sedeId: string | null, sala: string | null, 
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Ubicaciones: equipos por empresa y sede, para las tarjetas de Inventario
+// ---------------------------------------------------------------------------
+
+export interface ConteoUbicacion {
+  sede_id: string | null;
+  estado: string;
+  n: number;
+}
+
+/**
+ * Los conteos que alimentan las tarjetas de «Ubicaciones», agrupados en
+ * Postgres. Dos cortes, porque las tarjetas preguntan dos cosas distintas:
+ *
+ * - `por_empresa`: con la MISMA regla que el filtro por empresa del listado
+ *   (D31): un equipo prestado cuenta en su dueña y en quien lo tiene. Si la
+ *   tarjeta contara distinto que la lista que abre, el número sería decorativo.
+ * - `por_sede`: todo lo que está físicamente en una sede, de quien sea.
+ *
+ * SQL crudo con cada columna calificada por su alias (CLAUDE.md).
+ */
+export async function conteoUbicaciones(bd: BD = db) {
+  const porEmpresa = await bd.execute<{ empresa: string; sede_id: string | null; estado: string; n: number }>(
+    sql`SELECT x.empresa, x.sede_id, x.estado, count(*)::int AS n
+          FROM (
+            SELECT e.empresa::text AS empresa, e.sede_id, e.estado::text AS estado FROM equipos e
+            UNION ALL
+            SELECT e.prestado_a::text, e.sede_id, e.estado::text FROM equipos e
+             WHERE e.prestado_a IS NOT NULL
+          ) x
+         GROUP BY x.empresa, x.sede_id, x.estado`,
+  );
+  const porSede = await bd.execute<{ sede_id: string | null; estado: string; n: number }>(
+    sql`SELECT e.sede_id, e.estado::text AS estado, count(*)::int AS n
+          FROM equipos e
+         GROUP BY e.sede_id, e.estado`,
+  );
+  return {
+    por_empresa: porEmpresa.rows.map((f) => ({ ...f, n: Number(f.n) })),
+    por_sede: porSede.rows.map((f) => ({ ...f, n: Number(f.n) })),
+  };
+}

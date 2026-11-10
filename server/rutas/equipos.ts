@@ -341,6 +341,18 @@ export function registrarRutasEquipos(app: Express): void {
   // `GET /api/equipos/:id/historial` vive en `rutas/movimientos.ts` desde la
   // etapa 5. El de aquí devolvía los UUID a pelo, sin resolver nombres.
 
+  /** Los conteos de las tarjetas de «Ubicaciones»: por empresa y sede, y por sede. */
+  ruta(
+    app,
+    'get',
+    '/api/ubicaciones',
+    'autenticado',
+    guardian,
+    asincrono(async (_req, res) => {
+      res.json(await repoEquipos.conteoUbicaciones());
+    }),
+  );
+
   /**
    * Salas de entrenamiento: una fila por sede y sala, con sus puestos y
    * cuántos están completos (pantalla, teclado y mouse).

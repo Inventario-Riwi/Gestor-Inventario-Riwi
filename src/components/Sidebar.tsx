@@ -45,6 +45,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
    * Si la petición falla se queda vacío y el bloque lo dice. Antes había una
    * lista escrita a mano —cinco nombres y un «5 sembradas»— que ya mentía: se
    * escribió con cinco sedes y nadie la tocó al añadir Boyacá.
+   *
+   * Se vuelven a pedir al cambiar de pantalla: desde que existe «Nueva sede»,
+   * una sede creada en Sedes tiene que verse aquí al salir de allí, no al
+   * recargar el navegador. Son seis filas.
    */
   const [sedes, setSedes] = useState<Sede[]>([]);
 
@@ -54,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       (r) => setSedes(r.sedes.filter((s) => s.activa)),
       () => setSedes([]),
     );
-  }, []);
+  }, [activeTab]);
 
   const menuItems = [
     {

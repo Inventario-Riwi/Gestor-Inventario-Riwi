@@ -938,6 +938,28 @@ export async function puestosEnSalaSql(sala: string): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/**
+ * Equipos de una empresa en una sede, contados en SQL con la regla del filtro
+ * por empresa (D31: lo prestado cuenta en su dueña y en quien lo tiene). Es el
+ * número contra el que se contrasta `GET /api/ubicaciones`.
+ */
+export async function equiposEmpresaSedeSql(empresa: string, sedeId: string): Promise<number> {
+  const r = await db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM equipos
+         WHERE equipos.sede_id = ${sedeId}
+           AND (equipos.empresa::text = ${empresa} OR equipos.prestado_a::text = ${empresa})`,
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
+
+/** Todo lo que hay en una sede, de cualquier empresa, contado en SQL. */
+export async function equiposEnSedeSql(sedeId: string): Promise<number> {
+  const r = await db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM equipos WHERE equipos.sede_id = ${sedeId}`,
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 /** Los movimientos de un equipo, del más antiguo al más nuevo. */
 /** `drizzle.execute<T>` exige que `T` tenga índice de cadena. */
 export type MovimientoDePrueba = {

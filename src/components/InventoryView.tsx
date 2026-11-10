@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -26,6 +27,8 @@ import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-eq
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
 import { SalasEntrenamiento } from './SalasEntrenamiento';
+import { Ubicaciones } from './Ubicaciones';
+import type { Tarjeta } from '../lib/ubicaciones';
 import { esPeriferico, identificador, nombreVisible } from '../lib/nombre-equipo';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
@@ -58,7 +61,7 @@ interface InventoryViewProps {
   onEquipoMutado?: () => void;
 }
 
-type Pestana = 'todos' | 'revision' | 'salas';
+type Pestana = 'todos' | 'revision' | 'ubicaciones' | 'salas';
 
 const colorEstado: Record<EstadoEquipo, string> = {
   Asignado: 'bg-brand text-white',
@@ -83,6 +86,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [categoria, setCategoria] = useState<CategoriaEquipo | ''>('');
   const [sede, setSede] = useState('');
   const [empresa, setEmpresa] = useState('');
+  /**
+   * La tarjeta de «Ubicaciones» abierta. Mientras lo está, la empresa y la
+   * sede de la lista las fija ella y no se ofrecen para cambiar: la tabla
+   * tiene que contar lo mismo que decía la tarjeta.
+   */
+  const [ubicacion, setUbicacion] = useState<Tarjeta | null>(null);
   /** 0024: solo los equipos de centros de entrenamiento. */
   const [soloCe, setSoloCe] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -305,7 +314,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           Mismo mecanismo que la bandeja de motivos y que el de colaboradores
           (D28): un número delante es lo que hace que «Sin clasificar» se vea
           sin ir a buscarlo. */}
-      {conteosEmpresa && pestana !== 'salas' && (
+      {conteosEmpresa && pestana !== 'salas' && pestana !== 'ubicaciones' && (
         <div className="flex flex-wrap items-center gap-2">
           {Object.entries(conteosEmpresa).map(([nombre, n]) => {
             const activa = empresa === nombre;
@@ -344,12 +353,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       )}
 
       <div className="flex items-center gap-1 border-b border-line">
-        {(['todos', 'revision', 'salas'] as const).map((p) => (
+        {(['todos', 'revision', 'ubicaciones', 'salas'] as const).map((p) => (
           <button
             key={p}
             onClick={() => {
               setPestana(p);
               if (p === 'todos') setMotivo('');
+              // Salir de una tarjeta suelta su empresa y su sede: si no, la
+              // pestaña «Todos» quedaría filtrada sin que nadie lo pidiera.
+              if (ubicacion) {
+                setUbicacion(null);
+                setEmpresa('');
+                setSede('');
+              }
             }}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               pestana === p
@@ -357,7 +373,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
-            {p === 'todos' ? 'Todos' : p === 'revision' ? 'Bandeja de revisión' : 'Salas de entrenamiento'}
+            {p === 'todos'
+              ? 'Todos'
+              : p === 'revision'
+                ? 'Bandeja de revisión'
+                : p === 'ubicaciones'
+                  ? 'Empresas y sedes'
+                  : 'Salas de entrenamiento'}
             {p === 'revision' && conteos.length > 0 && (
               <span className="ml-2 text-xs bg-warn/20 text-ink px-1.5 py-0.5 rounded-full">
                 {conteos.reduce((a, c) => a + c.equipos, 0)}
@@ -374,8 +396,42 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           y por eso es un apartado y no un filtro más de la tabla. */}
       {pestana === 'salas' ? (
         <SalasEntrenamiento onAbrir={abrirPorId} />
+      ) : pestana === 'ubicaciones' && !ubicacion ? (
+        <Ubicaciones
+          sedes={sedes}
+          onAbrir={(t, sedeId) => {
+            setUbicacion(t);
+            setEmpresa(t.empresa ?? '');
+            setSede(sedeId ?? '');
+          }}
+        />
       ) : (
       <>
+      {ubicacion && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setUbicacion(null);
+              setEmpresa('');
+              setSede('');
+            }}
+            className="p-2 border border-line rounded-lg text-ink-muted hover:text-ink hover:bg-surface-alt"
+            aria-label="Volver a empresas y sedes"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h2 className="font-semibold text-ink">{ubicacion.titulo}</h2>
+            <p className="text-xs text-ink-muted">
+              {ubicacion.empresa && !ubicacion.sede
+                ? 'Todos sus equipos, en cualquier sede. Lo prestado cuenta en su dueña y en quien lo tiene.'
+                : ubicacion.empresa
+                  ? 'Sus equipos en esta sede. Lo prestado cuenta en su dueña y en quien lo tiene.'
+                  : 'Todo lo que está en esta sede, de cualquier empresa.'}
+            </p>
+          </div>
+        </div>
+      )}
       {pestana === 'revision' && conteos.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <button
@@ -564,6 +620,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         <select
           value={sede}
           onChange={(e) => setSede(e.target.value)}
+          // Dentro de una tarjeta con sede, la sede la fija la tarjeta.
+          disabled={!!ubicacion?.sede}
           className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
         >
           <option value="">Todas las sedes</option>
@@ -586,12 +644,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         >
           Centros de entrenamiento
         </button>
-        {(estado || categoria || sede || searchTerm || motivo || soloCe) && (
+        {(estado || categoria || (sede && !ubicacion?.sede) || searchTerm || motivo || soloCe) && (
           <button
             onClick={() => {
               setEstado('');
               setCategoria('');
-              setSede('');
+              // La sede de una tarjeta abierta no es un filtro que limpiar.
+              if (!ubicacion?.sede) setSede('');
               setMotivo('');
               setSearchTerm('');
               setSoloCe(false);

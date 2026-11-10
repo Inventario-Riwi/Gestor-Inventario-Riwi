@@ -7,6 +7,7 @@
  * eso es exactamente lo que se buscaba al no usar JWT en `localStorage`.
  */
 
+import type { ConteosUbicacion } from './ubicaciones';
 import type {
   ActaEmitida,
   ActaResumen,
@@ -418,6 +419,13 @@ export const api = {
   transiciones: () => pedir<CatalogoTransiciones>('/api/transiciones'),
 
   /** 0024. A qué computador pertenece y qué partes tiene. */
+  /** Conteos de las tarjetas de «Ubicaciones» (ver `lib/ubicaciones.ts`). */
+  ubicaciones: () => pedir<ConteosUbicacion>('/api/ubicaciones'),
+
+  /** Crear una sede. Solo admin, y con ciudad: sin ciudad sería otro «Remoto». */
+  crearSede: (datos: { nombre: string; ciudad: string }) =>
+    pedir<{ sede: Sede }>('/api/sedes', { method: 'POST', body: JSON.stringify(datos) }),
+
   /** Salas de entrenamiento: una fila por sede y sala. */
   salas: () => pedir<{ salas: ResumenSala[] }>('/api/salas'),
 

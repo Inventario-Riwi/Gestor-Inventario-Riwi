@@ -5,6 +5,7 @@ import {
   Check,
   Laptop,
   PackageCheck,
+  Plus,
   RefreshCw,
   Truck,
   Users,
@@ -36,14 +37,23 @@ interface SedesViewProps {
    * «3 en tránsito» con la lista ya vacía.
    */
   onTrasladoConfirmado?: () => void;
+  /** Solo admin crea sedes; el servidor también lo exige. */
+  esAdmin?: boolean;
 }
 
-export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) => {
+export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado, esAdmin = false }) => {
   const [sedes, setSedes] = useState<SedeConConteos[]>([]);
   const [sinSede, setSinSede] = useState(0);
   const [traslados, setTraslados] = useState<TrasladoAbierto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<ErrorApi | null>(null);
+
+  /** «Nueva sede»: el formulario abierto, lo escrito y el fallo si lo hubo. */
+  const [creando, setCreando] = useState(false);
+  const [nuevaNombre, setNuevaNombre] = useState('');
+  const [nuevaCiudad, setNuevaCiudad] = useState('');
+  const [guardandoSede, setGuardandoSede] = useState(false);
+  const [errorSede, setErrorSede] = useState<string | null>(null);
 
   /** El id del traslado que se está confirmando, y el fallo si lo hubo. */
   const [confirmando, setConfirmando] = useState<string | null>(null);
@@ -76,6 +86,23 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
   }, []);
 
   useSondeo(() => cargar({ silencioso: true }));
+
+  const crearSede = async () => {
+    setGuardandoSede(true);
+    setErrorSede(null);
+    try {
+      await api.crearSede({ nombre: nuevaNombre.trim(), ciudad: nuevaCiudad.trim() });
+      setCreando(false);
+      setNuevaNombre('');
+      setNuevaCiudad('');
+      await cargar();
+    } catch (e) {
+      // El nombre es UNIQUE: el 409 dice que ya existe, que es lo que pasó.
+      setErrorSede(e instanceof ErrorApi ? e.message : 'No se pudo crear la sede.');
+    } finally {
+      setGuardandoSede(false);
+    }
+  };
 
   const [ventana, preguntar] = useConfirmacion();
 
@@ -121,15 +148,89 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado }) =>
           </h1>
           <p className="text-sm text-ink-muted mt-1">Equipos y personas por sede.</p>
         </div>
-        <button
-          onClick={() => void cargar()}
-          disabled={cargando}
-          className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
-        >
-          <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void cargar()}
+            disabled={cargando}
+            className="px-3 py-2 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+          {esAdmin && !creando && (
+            <button
+              onClick={() => setCreando(true)}
+              className="px-3 py-2 text-sm bg-brand text-white rounded-lg hover:opacity-90 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Nueva sede
+            </button>
+          )}
+        </div>
       </header>
+
+      {creando && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void crearSede();
+          }}
+          className="border border-line rounded-xl bg-surface p-4 space-y-3"
+        >
+          <p className="font-semibold text-ink">Nueva sede</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="text-xs text-ink-muted space-y-1">
+              <span>Nombre *</span>
+              <input
+                value={nuevaNombre}
+                onChange={(e) => setNuevaNombre(e.target.value)}
+                placeholder="p. ej. Armenia"
+                className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+              />
+            </label>
+            <label className="text-xs text-ink-muted space-y-1">
+              <span>Ciudad *</span>
+              <input
+                value={nuevaCiudad}
+                onChange={(e) => setNuevaCiudad(e.target.value)}
+                placeholder="p. ej. Armenia"
+                className="w-full px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+              />
+            </label>
+          </div>
+          <p className="text-[11px] text-ink-muted">
+            La ciudad es obligatoria: una sede sin ciudad es como la aplicación reconoce a
+            «Remoto».
+          </p>
+          {errorSede && (
+            <p role="alert" className="text-xs text-danger">
+              {errorSede}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCreando(false);
+                setNuevaNombre('');
+                setNuevaCiudad('');
+                setErrorSede(null);
+              }}
+              disabled={guardandoSede}
+              className="px-3 py-1.5 text-sm border border-line rounded-lg text-ink-muted hover:bg-surface-alt"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardandoSede || !nuevaNombre.trim() || !nuevaCiudad.trim()}
+              className="px-3 py-1.5 text-sm bg-brand text-white rounded-lg font-medium disabled:opacity-50"
+            >
+              {guardandoSede ? 'Creando…' : 'Crear sede'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {error ? (
         <ErrorDeCarga error={error} que="las sedes" onReintentar={() => void cargar()} />

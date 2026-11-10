@@ -34,6 +34,9 @@ import {
   movimientosDe,
   primeraSede,
   puestosEnSalaSql,
+  equiposEmpresaSedeSql,
+  equiposEnSedeSql,
+  borrarSedes,
   sedeDe,
   sedePorNombre,
   trasladoAbiertoDe,
@@ -1811,5 +1814,89 @@ describe('serial «N/A»: es sin serial, y por eso se repite', () => {
     });
     assert.equal(r.estado, 400);
     assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empresas y sedes: las tarjetas cuentan lo que cuenta SQL
+// ---------------------------------------------------------------------------
+
+describe('ubicaciones: conteos por empresa y sede', () => {
+  const suite = ambito('ubic');
+  let admin: UsuarioDePrueba;
+  let tecnico: UsuarioDePrueba;
+  let sede: string;
+  const creados: string[] = [];
+  const sedesCreadas: string[] = [];
+  let c: Cliente;
+
+  type Conteos = {
+    por_empresa: { empresa: string; sede_id: string | null; estado: string; n: number }[];
+    por_sede: { sede_id: string | null; estado: string; n: number }[];
+  };
+  const leer = async () => (await c.get('/api/ubicaciones')).cuerpo as Conteos;
+  const deEmpresa = (k: Conteos, empresa: string, sedeId: string) =>
+    k.por_empresa.filter((f) => f.empresa === empresa && f.sede_id === sedeId).reduce((a, f) => a + f.n, 0);
+  const deSede = (k: Conteos, sedeId: string) =>
+    k.por_sede.filter((f) => f.sede_id === sedeId).reduce((a, f) => a + f.n, 0);
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    tecnico = await suite.crearUsuario({ sufijo: 'tec', rol: 'tecnico' });
+    sede = await primeraSede();
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await borrarSedes(sedesCreadas);
+    await suite.limpiar();
+  });
+
+  it('los conteos cuadran con SQL, y un alta mueve la tarjeta de su empresa y de su sede', async () => {
+    const antes = await leer();
+    assert.equal(deEmpresa(antes, 'RIWI', sede), await equiposEmpresaSedeSql('RIWI', sede));
+    assert.equal(deSede(antes, sede), await equiposEnSedeSql(sede));
+
+    for (const [etq, empresa] of [['U1', 'RIWI'], ['U2', 'RIWI'], ['U3', 'BBL Labs']] as const) {
+      const r = await c.post('/api/equipos', {
+        categoria: 'Mouse',
+        etiqueta: `${suite.prefijo}${etq}`,
+        estado: 'Disponible',
+        sede_id: sede,
+        empresa,
+      });
+      assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+      creados.push((r.cuerpo as { equipo: { id: string } }).equipo.id);
+    }
+
+    const despues = await leer();
+    assert.equal(deEmpresa(despues, 'RIWI', sede) - deEmpresa(antes, 'RIWI', sede), 2);
+    assert.equal(deEmpresa(despues, 'BBL Labs', sede) - deEmpresa(antes, 'BBL Labs', sede), 1);
+    // La tarjeta de sede cuenta los tres, sea de quien sea.
+    assert.equal(deSede(despues, sede) - deSede(antes, sede), 3);
+    assert.equal(deSede(despues, sede), await equiposEnSedeSql(sede));
+  });
+
+  it('un técnico no crea sedes: 403', async () => {
+    const t = nuevo();
+    await t.entrar(tecnico.email, tecnico.password);
+    const r = await t.post('/api/sedes', { nombre: `${suite.prefijo}Sede Tecnico`, ciudad: 'Armenia' });
+    assert.equal(r.estado, 403);
+  });
+
+  it('una sede sin ciudad es 400: sería un segundo «Remoto»', async () => {
+    const r = await c.post('/api/sedes', { nombre: `${suite.prefijo}Sin Ciudad` });
+    assert.equal(r.estado, 400);
+  });
+
+  it('un admin crea la sede con ciudad, y el mismo nombre otra vez es 409', async () => {
+    const nombre = `${suite.prefijo}Armenia`;
+    const r = await c.post('/api/sedes', { nombre, ciudad: 'Armenia' });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    sedesCreadas.push((r.cuerpo as { sede: { id: string } }).sede.id);
+    const otra = await c.post('/api/sedes', { nombre, ciudad: 'Armenia' });
+    assert.equal(otra.estado, 409);
   });
 });
