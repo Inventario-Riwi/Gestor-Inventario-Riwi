@@ -39,7 +39,10 @@ const sinMarcadorOpcional = (v: string | null | undefined) =>
 
 const camposEquipo = z.object({
   categoria: z.enum(categoriaEquipo.enumValues),
-  etiqueta: z.string().trim().min(1).max(60).nullable().optional(),
+  // Como el serial: «N/A», «No tiene», «Sin etiqueta»… es que no hay etiqueta.
+  // Va a NULL y por eso se puede repetir; como texto chocaba contra el índice
+  // único de la primera «N/A» (marcadores.ts).
+  etiqueta: z.string().max(60).nullable().optional().transform(sinMarcadorOpcional),
   nombre_equipo: z.string().trim().max(120).nullable().optional(),
   marca: z.string().trim().max(80).nullable().optional(),
   modelo: z.string().trim().max(120).nullable().optional(),
@@ -123,7 +126,7 @@ const camposEquipo = z.object({
 const accesorio = z
   .object({
     categoria: z.enum(['Monitor', 'Teclado', 'Mouse']),
-    etiqueta: z.string().trim().min(1).max(60).nullable().optional(),
+    etiqueta: z.string().max(60).nullable().optional().transform(sinMarcadorOpcional),
     marca: z.string().trim().max(80).nullable().optional(),
     modelo: z.string().trim().max(120).nullable().optional(),
     serial: z.string().max(120).nullable().optional().transform(sinMarcadorOpcional),

@@ -1900,3 +1900,71 @@ describe('ubicaciones: conteos por empresa y sede', () => {
     assert.equal(otra.estado, 409);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Etiqueta «N/A»: es sin etiqueta, y por eso se repite (marcadores.ts)
+// ---------------------------------------------------------------------------
+//
+// Escrito desde el pedido del usuario: «la etiqueta N/A debe ser repetible».
+// Por los dos lados: los marcadores se repiten, una etiqueta real repetida no.
+
+describe('etiqueta «N/A»: es sin etiqueta, y por eso se repite', () => {
+  const suite = ambito('etqna');
+  let admin: UsuarioDePrueba;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await suite.limpiar();
+  });
+
+  const alta = (etiqueta: string, serial: string) =>
+    c.post('/api/equipos', { categoria: 'Diadema', etiqueta, serial, estado: 'Disponible' });
+
+  it('dos equipos con etiqueta «N/A» entran, y los dos quedan sin etiqueta', async () => {
+    for (const [i, etq] of ['N/A', 'n/a', 'Sin etiqueta', 'No tiene'].entries()) {
+      const r = await alta(etq, `SN-${suite.prefijo}NA${i}`);
+      assert.equal(r.estado, 201, `${etq}: ${JSON.stringify(r.cuerpo)}`);
+      const e = (r.cuerpo as { equipo: { id: string; etiqueta: string | null } }).equipo;
+      creados.push(e.id);
+      assert.equal(e.etiqueta, null, `«${etq}» debía quedar sin etiqueta`);
+    }
+  });
+
+  it('editar la etiqueta a «N/A» la deja vacía, aunque otro ya la tenga', async () => {
+    const r = await alta(`${suite.prefijo}ED`, `SN-${suite.prefijo}ED`);
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    const p = await c.patch(`/api/equipos/${id}`, { etiqueta: 'N/A' });
+    assert.equal(p.estado, 200, JSON.stringify(p.cuerpo));
+    assert.equal((p.cuerpo as { equipo: { etiqueta: string | null } }).equipo.etiqueta, null);
+  });
+
+  it('una etiqueta real repetida sigue siendo 409 (el otro lado)', async () => {
+    const etiqueta = `${suite.prefijo}REAL`;
+    const a = await alta(etiqueta, `SN-${suite.prefijo}R1`);
+    assert.equal(a.estado, 201);
+    creados.push((a.cuerpo as { equipo: { id: string } }).equipo.id);
+    const b = await alta(etiqueta, `SN-${suite.prefijo}R2`);
+    assert.equal(b.estado, 409);
+  });
+
+  it('sin serial y con etiqueta «N/A» no hay forma de identificarlo: no entra como identificado', async () => {
+    const etiqueta = `${suite.prefijo}MESA-ETQNA`;
+    const r = await c.post('/api/equipos', {
+      categoria: 'Desktop',
+      etiqueta,
+      estado: 'Disponible',
+      accesorios: [{ categoria: 'Mouse', etiqueta: 'N/A' }],
+    });
+    assert.equal(r.estado, 400, 'un accesorio con solo «N/A» no se puede señalar');
+    assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+});
