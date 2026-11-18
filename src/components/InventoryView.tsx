@@ -183,7 +183,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         sede,
         empresa,
         q: searchTerm,
-        ce: soloCe || undefined,
+        // Una tarjeta de «Empresas y sedes» no cuenta las salas de
+        // entrenamiento (conteoUbicaciones): su lista tampoco las enseña.
+        ce: ubicacion ? false : soloCe || undefined,
         uso: uso || undefined,
         pagina,
         porPagina,
@@ -217,7 +219,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } finally {
       if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, pagina]);
+  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, pagina, ubicacion]);
 
   // En pausa mientras se editan los datos de un equipo: nada se refresca
   // debajo de un formulario a medio escribir.
@@ -404,6 +406,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           sedes={sedes}
           onAbrir={(t, sedeId) => {
             setUbicacion(t);
+            setSoloCe(false);
             setEmpresa(t.empresa ?? '');
             setSede(sedeId ?? '');
           }}
@@ -647,7 +650,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </option>
           ))}
         </select>
-        {/* 0024. Las salas de entrenamiento: un clic para verlas solas. */}
+        {/* 0024. Las salas de entrenamiento: un clic para verlas solas. No
+            dentro de una tarjeta de «Empresas y sedes», que las excluye. */}
+        {!ubicacion && (
         <button
           type="button"
           onClick={() => setSoloCe((v) => !v)}
@@ -660,6 +665,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         >
           Centros de entrenamiento
         </button>
+        )}
         {(estado || categoria || (sede && !ubicacion?.sede) || searchTerm || motivo || soloCe || uso) && (
           <button
             onClick={() => {

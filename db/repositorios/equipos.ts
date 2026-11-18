@@ -1157,6 +1157,13 @@ export interface ConteoUbicacion {
  *   tarjeta contara distinto que la lista que abre, el número sería decorativo.
  * - `por_sede`: todo lo que está físicamente en una sede, de quien sea.
  *
+ * Ninguno de los dos cuenta los equipos de **salas de entrenamiento**
+ * (`centro_entrenamiento`): son puestos de formación, no equipos del staff, y
+ * tienen su propio apartado («Salas de entrenamiento»), que los cuenta por
+ * puesto. Sumarlos aquí inflaba la tarjeta de la sede con cientos de equipos
+ * que no son de nadie del equipo. La lista que abre la tarjeta los excluye
+ * igual (`ce: false`), para que tarjeta y lista no cuenten distinto.
+ *
  * SQL crudo con cada columna calificada por su alias (CLAUDE.md).
  */
 export async function conteoUbicaciones(bd: BD = db) {
@@ -1164,15 +1171,18 @@ export async function conteoUbicaciones(bd: BD = db) {
     sql`SELECT x.empresa, x.sede_id, x.estado, count(*)::int AS n
           FROM (
             SELECT e.empresa::text AS empresa, e.sede_id, e.estado::text AS estado FROM equipos e
+             WHERE NOT e.centro_entrenamiento
             UNION ALL
             SELECT e.prestado_a::text, e.sede_id, e.estado::text FROM equipos e
              WHERE e.prestado_a IS NOT NULL
+               AND NOT e.centro_entrenamiento
           ) x
          GROUP BY x.empresa, x.sede_id, x.estado`,
   );
   const porSede = await bd.execute<{ sede_id: string | null; estado: string; n: number }>(
     sql`SELECT e.sede_id, e.estado::text AS estado, count(*)::int AS n
           FROM equipos e
+         WHERE NOT e.centro_entrenamiento
          GROUP BY e.sede_id, e.estado`,
   );
   return {

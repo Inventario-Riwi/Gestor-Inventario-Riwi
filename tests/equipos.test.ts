@@ -1881,6 +1881,50 @@ describe('ubicaciones: conteos por empresa y sede', () => {
     assert.equal(deSede(despues, sede), await equiposEnSedeSql(sede));
   });
 
+  // Escrito desde el pedido del usuario: «los equipos de las salas no pueden
+  // entrar en el mismo campo de empresas y sedes». Por los dos lados: un
+  // equipo de sala no mueve ninguna tarjeta, y el mismo equipo sin sala sí.
+  it('un equipo de sala de entrenamiento no cuenta en su empresa ni en su sede', async () => {
+    const antes = await leer();
+    const sala = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}SALA`,
+      serial: `SN-${suite.prefijo}SALA`,
+      estado: 'Disponible',
+      sede_id: sede,
+      empresa: 'RIWI',
+      centro_entrenamiento: true,
+      ubicacion_detalle: `${suite.prefijo} Sala P3`,
+    });
+    assert.equal(sala.estado, 201, JSON.stringify(sala.cuerpo));
+    creados.push((sala.cuerpo as { equipo: { id: string } }).equipo.id);
+
+    const conSala = await leer();
+    assert.equal(deEmpresa(conSala, 'RIWI', sede), deEmpresa(antes, 'RIWI', sede));
+    assert.equal(deSede(conSala, sede), deSede(antes, sede));
+    assert.equal(deEmpresa(conSala, 'RIWI', sede), await equiposEmpresaSedeSql('RIWI', sede));
+
+    // La lista que abre la tarjeta (ce=false) tampoco lo enseña…
+    const lista = await c.get(`/api/equipos?sede=${sede}&empresa=RIWI&ce=false&q=${suite.prefijo}SALA`);
+    assert.equal(lista.estado, 200);
+    assert.equal((lista.cuerpo as { total: number }).total, 0);
+
+    // …y el otro lado: el mismo alta sin sala sí mueve las dos tarjetas.
+    const staff = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}STAFF`,
+      serial: `SN-${suite.prefijo}STAFF`,
+      estado: 'Disponible',
+      sede_id: sede,
+      empresa: 'RIWI',
+    });
+    assert.equal(staff.estado, 201, JSON.stringify(staff.cuerpo));
+    creados.push((staff.cuerpo as { equipo: { id: string } }).equipo.id);
+    const conStaff = await leer();
+    assert.equal(deEmpresa(conStaff, 'RIWI', sede) - deEmpresa(conSala, 'RIWI', sede), 1);
+    assert.equal(deSede(conStaff, sede) - deSede(conSala, sede), 1);
+  });
+
   it('un técnico no crea sedes: 403', async () => {
     const t = nuevo();
     await t.entrar(tecnico.email, tecnico.password);

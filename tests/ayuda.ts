@@ -941,21 +941,25 @@ export async function puestosEnSalaSql(sala: string): Promise<number> {
 /**
  * Equipos de una empresa en una sede, contados en SQL con la regla del filtro
  * por empresa (D31: lo prestado cuenta en su dueña y en quien lo tiene). Es el
- * número contra el que se contrasta `GET /api/ubicaciones`.
+ * número contra el que se contrasta `GET /api/ubicaciones`. Sin las salas de
+ * entrenamiento: no son equipos del staff y tienen su propio apartado.
  */
 export async function equiposEmpresaSedeSql(empresa: string, sedeId: string): Promise<number> {
   const r = await db.execute<{ n: string }>(
     sql`SELECT count(*)::text AS n FROM equipos
          WHERE equipos.sede_id = ${sedeId}
+           AND NOT equipos.centro_entrenamiento
            AND (equipos.empresa::text = ${empresa} OR equipos.prestado_a::text = ${empresa})`,
   );
   return Number(r.rows[0]?.n ?? 0);
 }
 
-/** Todo lo que hay en una sede, de cualquier empresa, contado en SQL. */
+/** Todo lo que hay en una sede, de cualquier empresa, contado en SQL. Sin salas de entrenamiento. */
 export async function equiposEnSedeSql(sedeId: string): Promise<number> {
   const r = await db.execute<{ n: string }>(
-    sql`SELECT count(*)::text AS n FROM equipos WHERE equipos.sede_id = ${sedeId}`,
+    sql`SELECT count(*)::text AS n FROM equipos
+         WHERE equipos.sede_id = ${sedeId}
+           AND NOT equipos.centro_entrenamiento`,
   );
   return Number(r.rows[0]?.n ?? 0);
 }
