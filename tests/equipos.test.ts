@@ -34,6 +34,8 @@ import {
   movimientosDe,
   primeraSede,
   puestosEnSalaSql,
+  segundaSede,
+  contarEmpleadosActivosSql,
   equiposEmpresaSedeSql,
   equiposEnSedeSql,
   borrarSedes,
@@ -1966,5 +1968,250 @@ describe('etiqueta «N/A»: es sin etiqueta, y por eso se repite', () => {
     });
     assert.equal(r.estado, 400, 'un accesorio con solo «N/A» no se puede señalar');
     assert.equal(await contarEquiposConEtiqueta(etiqueta), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Los desplegables de «¿a quién?» traen a TODAS las personas activas
+// ---------------------------------------------------------------------------
+//
+// Con más de 200 personas, la lista se cortaba en orden alfabético (a la
+// altura de «Santiago Lemus») porque los desplegables pedían la primera página
+// del listado. Se prueba con 210 personas: más que el tope viejo.
+
+describe('colaboradores activos: sin tope para los desplegables', () => {
+  const suite = ambito('activos');
+  let admin: UsuarioDePrueba;
+  const ids: string[] = [];
+  let c: Cliente;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+    for (let i = 0; i < 210; i++) {
+      ids.push(await crearEmpleado(`${suite.prefijo}Persona ${String(i).padStart(3, '0')}`));
+    }
+    // La última del alfabeto: la que el tope viejo dejaba fuera.
+    ids.push(await crearEmpleado(`zzzz ${suite.prefijo}Ultima Persona`));
+  });
+
+  after(async () => {
+    await borrarEmpleados(ids);
+    await suite.limpiar();
+  });
+
+  it('trae a todas las activas, la última del alfabeto incluida, y cuadra con SQL', async () => {
+    const r = await c.get('/api/empleados/activos');
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo).slice(0, 200));
+    const { filas, total } = r.cuerpo as { filas: { id: string; nombre: string }[]; total: number };
+    assert.ok(filas.length > 200, `solo vinieron ${filas.length}: sigue cortada`);
+    assert.equal(filas.length, total, 'las filas no cuadran con el total');
+    assert.equal(total, await contarEmpleadosActivosSql());
+    assert.ok(
+      filas.some((f) => f.nombre === `zzzz ${suite.prefijo}Ultima Persona`),
+      'la última del alfabeto no vino',
+    );
+  });
+
+  it('no trae a las inactivas (el otro lado)', async () => {
+    const inactiva = await crearEmpleado(`${suite.prefijo}Inactiva`);
+    ids.push(inactiva);
+    assert.equal((await c.patch(`/api/empleados/${inactiva}`, { activo: false })).estado, 200);
+    const r = await c.get('/api/empleados/activos');
+    const filas = (r.cuerpo as { filas: { id: string }[] }).filas;
+    assert.ok(!filas.some((f) => f.id === inactiva), 'trajo a una persona inactiva');
+  });
+
+  it('«activos» no se confunde con un id de colaborador', async () => {
+    const r = await c.get('/api/empleados/activos');
+    assert.notEqual(r.estado, 400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// «Entregar equipos» ve TODO lo entregable, no la primera página del inventario
+// ---------------------------------------------------------------------------
+
+describe('equipos entregables: sin tope, y solo lo que se puede entregar', () => {
+  const suite = ambito('entreg');
+  let admin: UsuarioDePrueba;
+  let persona: string;
+  const ids: string[] = [];
+  let c: Cliente;
+  let asignado: string;
+  let infra: string;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    persona = await crearEmpleado(`${suite.prefijo}Persona Entregas`);
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+    for (let i = 0; i < 205; i++) {
+      const r = await c.post('/api/equipos', {
+        categoria: 'Portátil',
+        etiqueta: `${suite.prefijo}P${String(i).padStart(3, '0')}`,
+        estado: 'Disponible',
+      });
+      ids.push((r.cuerpo as { equipo: { id: string } }).equipo.id);
+    }
+    const a = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}ASIG`,
+      estado: 'Asignado',
+      empleado_id: persona,
+    });
+    asignado = (a.cuerpo as { equipo: { id: string } }).equipo.id;
+    ids.push(asignado);
+    const b = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}INFRA`,
+      estado: 'Disponible',
+    });
+    infra = (b.cuerpo as { equipo: { id: string } }).equipo.id;
+    ids.push(infra);
+    await marcarNoAsignable(infra);
+  });
+
+  after(async () => {
+    await borrarEquipos(ids);
+    await borrarEmpleados([persona]);
+    await suite.limpiar();
+  });
+
+  it('trae los 205 de la suite, más que el tope viejo, y nada asignado ni de infraestructura', async () => {
+    const r = await c.get('/api/equipos/entregables');
+    assert.equal(r.estado, 200);
+    const { filas, total } = r.cuerpo as {
+      filas: { id: string; estado: string; asignable: boolean }[];
+      total: number;
+    };
+    assert.equal(filas.length, total);
+    const suyos = filas.filter((f) => ids.includes(f.id));
+    assert.equal(suyos.length, 205, `vinieron ${suyos.length} de la suite`);
+    assert.ok(!filas.some((f) => f.id === asignado), 'trajo uno asignado');
+    assert.ok(!filas.some((f) => f.id === infra), 'trajo uno de infraestructura');
+    assert.ok(
+      filas.every((f) => (f.estado === 'Disponible' || f.estado === 'Reservado') && f.asignable),
+      'trajo algo que no se puede entregar',
+    );
+  });
+
+  it('«entregables» no se confunde con un id de equipo', async () => {
+    assert.notEqual((await c.get('/api/equipos/entregables')).estado, 400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0028: uso exclusivo (Préstamo interno / Eventos)
+// ---------------------------------------------------------------------------
+//
+// Escrito desde la decisión del usuario: «solo para que no asignen los
+// equipos, sino que están en un préstamo entre empresas o que es exclusivo
+// para eventos», y del pool (a nombre de nadie). Por los dos lados: lo que se
+// bloquea y lo que sigue funcionando.
+
+describe('uso exclusivo: Préstamo interno y Eventos no se asignan', () => {
+  const suite = ambito('uso');
+  let admin: UsuarioDePrueba;
+  let persona: string;
+  let otraSede: string;
+  const creados: string[] = [];
+  let c: Cliente;
+
+  const nuevo_ = async (etq: string, uso: string | null) => {
+    const r = await c.post('/api/equipos', {
+      categoria: 'Portátil',
+      etiqueta: `${suite.prefijo}${etq}`,
+      estado: 'Disponible',
+      sede_id: await primeraSede(),
+      empresa: 'RIWI',
+      ...(uso ? { uso_exclusivo: uso } : {}),
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    const id = (r.cuerpo as { equipo: { id: string } }).equipo.id;
+    creados.push(id);
+    return id;
+  };
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    persona = await crearEmpleado(`${suite.prefijo}Persona Uso`);
+    otraSede = await segundaSede();
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+  });
+
+  after(async () => {
+    for (const id of creados) {
+      const t = await trasladoAbiertoDe(id);
+      if (t) await c.post(`/api/movimientos/${t.id}/confirmar`, {});
+    }
+    await borrarEquipos(creados);
+    await borrarEmpleados([persona]);
+    await suite.limpiar();
+  });
+
+  it('uno de eventos no se asigna, ni se reserva, ni se presta: 409 que lo dice', async () => {
+    const id = await nuevo_('EV1', 'Eventos');
+    for (const [op, cuerpo] of [
+      ['asignar', { empleado_id: persona }],
+      ['reservar', {}],
+      ['prestar', { prestado_a: 'ISF' }],
+    ] as const) {
+      const r = await c.post(`/api/equipos/${id}/${op}`, cuerpo);
+      assert.equal(r.estado, 409, `${op}: ${JSON.stringify(r.cuerpo)}`);
+      assert.match(JSON.stringify(r.cuerpo), /eventos/i);
+    }
+    assert.equal(await estadoDe(id), 'Disponible');
+  });
+
+  it('uno de eventos sí se traslada (el otro lado: no se bloquea todo)', async () => {
+    const id = await nuevo_('EV2', 'Eventos');
+    const r = await c.post(`/api/equipos/${id}/trasladar`, { sede_destino_id: otraSede });
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+  });
+
+  it('uno de préstamo interno se presta a otra empresa, pero no se asigna', async () => {
+    const id = await nuevo_('PI1', 'Préstamo interno');
+    const a = await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    assert.equal(a.estado, 409);
+    const p = await c.post(`/api/equipos/${id}/prestar`, { prestado_a: 'ISF' });
+    assert.equal(p.estado, 200, JSON.stringify(p.cuerpo));
+    assert.equal(await estadoDe(id), 'Prestado');
+  });
+
+  it('el catálogo pinta los botones con la misma regla', async () => {
+    const r = await c.get('/api/transiciones');
+    const cat = r.cuerpo as { por_estado_uso: Record<string, Record<string, string[]>> };
+    const ev = cat.por_estado_uso['Eventos']['Disponible'];
+    const pi = cat.por_estado_uso['Préstamo interno']['Disponible'];
+    assert.ok(!ev.includes('asignar') && !ev.includes('reservar') && !ev.includes('prestar'));
+    assert.ok(ev.includes('trasladar'));
+    assert.ok(pi.includes('prestar') && !pi.includes('asignar'));
+  });
+
+  it('no se puede marcar uno que está asignado (409), y sí uno libre', async () => {
+    const id = await nuevo_('MARCA', null);
+    await c.post(`/api/equipos/${id}/asignar`, { empleado_id: persona });
+    const malo = await c.patch(`/api/equipos/${id}`, { uso_exclusivo: 'Eventos' });
+    assert.equal(malo.estado, 409);
+    await c.post(`/api/equipos/${id}/devolver`, {});
+    const bien = await c.patch(`/api/equipos/${id}`, { uso_exclusivo: 'Eventos' });
+    assert.equal(bien.estado, 200, JSON.stringify(bien.cuerpo));
+    const quitar = await c.patch(`/api/equipos/${id}`, { uso_exclusivo: null });
+    assert.equal(quitar.estado, 200);
+  });
+
+  it('«Entregar equipos» no los ofrece, y el filtro los encuentra', async () => {
+    const ev = await nuevo_('EV3', 'Eventos');
+    const libre = await nuevo_('LIBRE', null);
+    const e = (await c.get('/api/equipos/entregables')).cuerpo as { filas: { id: string }[] };
+    assert.ok(!e.filas.some((f) => f.id === ev), 'ofreció uno de eventos');
+    assert.ok(e.filas.some((f) => f.id === libre), 'no ofreció uno libre');
+    const f = (await c.get(`/api/equipos?uso=Eventos&q=${encodeURIComponent(suite.prefijo)}`))
+      .cuerpo as { filas: { id: string; uso_exclusivo: string | null }[] };
+    assert.ok(f.filas.length > 0 && f.filas.every((x) => x.uso_exclusivo === 'Eventos'));
+    assert.ok(f.filas.some((x) => x.id === ev));
   });
 });

@@ -57,7 +57,7 @@ export const ResolverMotivos: React.FC<ResolverMotivosProps> = ({ equipo, onCamb
   useEffect(() => {
     if (!hayConflicto) return;
     let vigente = true;
-    api.empleados({ porPagina: 300, activo: true }).then(
+    api.empleadosActivos().then(
       (d) => vigente && setEmpleados(d.filas),
       () => vigente && setEmpleados([]),
     );

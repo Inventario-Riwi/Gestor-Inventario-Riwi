@@ -296,6 +296,61 @@ BEGIN
         WHERE table_name = 'equipos' AND column_name = 'mouse_sin_serial'));
   END;
 
+  -- 3k. 0028: uso exclusivo. Escrito desde la decisión del usuario («solo
+  -- para que no asignen los equipos»): del pool, a nombre de nadie, y los de
+  -- eventos tampoco se prestan. Por los dos lados.
+  DECLARE
+    v_pool uuid;
+  BEGIN
+    BEGIN
+      INSERT INTO equipos (categoria, estado, uso_exclusivo)
+        VALUES ('Portátil', 'Disponible', 'Eventos') RETURNING id INTO v_pool;
+      INSERT INTO resultado VALUES ('0028: equipo de eventos disponible', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation OR undefined_column THEN
+      INSERT INTO resultado VALUES ('0028: equipo de eventos disponible', 'aceptado', 'RECHAZADO');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, empleado_id, uso_exclusivo)
+        VALUES ('Portátil', 'Asignado', v_emp, 'Eventos');
+      INSERT INTO resultado VALUES ('0028: equipo de eventos asignado a alguien', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0028: equipo de eventos asignado a alguien', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, uso_exclusivo)
+        VALUES ('Portátil', 'Reservado', 'Préstamo interno');
+      INSERT INTO resultado VALUES ('0028: préstamo interno reservado', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0028: préstamo interno reservado', 'rechazado', 'rechazado');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, prestado_a, uso_exclusivo)
+        VALUES ('Portátil', 'Prestado', 'ISF', 'Préstamo interno');
+      INSERT INTO resultado VALUES ('0028: préstamo interno prestado a otra empresa', 'aceptado', 'aceptado');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0028: préstamo interno prestado a otra empresa', 'aceptado', 'RECHAZADO');
+    END;
+
+    BEGIN
+      INSERT INTO equipos (categoria, estado, prestado_a, uso_exclusivo)
+        VALUES ('Portátil', 'Prestado', 'ISF', 'Eventos');
+      INSERT INTO resultado VALUES ('0028: equipo de eventos prestado', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0028: equipo de eventos prestado', 'rechazado', 'rechazado');
+    END;
+
+    -- Asignarlo después tampoco es una puerta trasera.
+    BEGIN
+      UPDATE equipos SET estado = 'Asignado', empleado_id = v_emp WHERE id = v_pool;
+      INSERT INTO resultado VALUES ('0028: asignar luego un equipo de eventos', 'rechazado', 'ACEPTADO');
+    EXCEPTION WHEN check_violation THEN
+      INSERT INTO resultado VALUES ('0028: asignar luego un equipo de eventos', 'rechazado', 'rechazado');
+    END;
+  END;
+
   -- 3f. 0022: el país de un remoto es lista cerrada; departamento y ciudad no.
   BEGIN
     INSERT INTO empleados (nombre, pais, departamento, ciudad)

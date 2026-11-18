@@ -21,6 +21,7 @@ import {
   licenciaTipo,
   prestatario,
   propiedadEquipo,
+  usoExclusivo,
 } from '../../db/esquema.js';
 import { sinMarcador } from '../../db/marcadores.js';
 import { CODIGOS } from '../../db/motivos.js';
@@ -94,6 +95,11 @@ const camposEquipo = z.object({
   ubicacion_detalle: z.string().trim().max(120).nullable().optional(),
   /** 0027. El puesto trae mouse, sin serial. Solo Desktop: lo dice la CHECK. */
   mouse_sin_serial: z.boolean().optional(),
+  /**
+   * 0028. Préstamo interno / Eventos, o null para quitarlo. No se puede poner
+   * a un equipo asignado o reservado: la CHECK lo rechaza y su 409 lo dice.
+   */
+  uso_exclusivo: z.enum(usoExclusivo.enumValues).nullable().optional(),
   /**
    * Pesos colombianos, como cadena: `numeric(14,2)` no cabe en un `number` de
    * JavaScript sin perder precisión, y `pg` lo devuelve como texto por lo
@@ -190,6 +196,8 @@ const esquemaFiltros = z.object({
    */
   empresa: z.enum([...prestatario.enumValues, 'Sin clasificar']).optional(),
   q: z.string().trim().max(120).optional(),
+  /** 0028: solo los de ese uso exclusivo. */
+  uso: z.enum(usoExclusivo.enumValues).optional(),
   /** 0024: solo los de centros de entrenamiento. */
   ce: z
     .enum(['true', 'false'])
@@ -311,6 +319,29 @@ export function registrarRutasEquipos(app: Express): void {
         // ellas: un recuento de fallos sin nombres obliga a buscarlos a mano.
         fallidos,
       });
+    }),
+  );
+
+  // Antes de '/api/equipos/:id', como /revision y /resumen: si no,
+  // «entregables» se validaría como un id y daría 400.
+  /**
+   * Todo lo que se puede entregar a alguien —Disponible o Reservado, y
+   * asignable—, sin paginar. Para «Entregar equipos».
+   *
+   * Ese modal pedía la primera página del inventario entero (200 equipos por
+   * etiqueta) y filtraba en el navegador: con el inventario real, la mayoría
+   * de los portátiles libres quedaban detrás del corte y no se podían
+   * entregar. Filtrar en Postgres y sin tope trae exactamente lo elegible.
+   */
+  ruta(
+    app,
+    'get',
+    '/api/equipos/entregables',
+    'autenticado',
+    guardian,
+    asincrono(async (_req, res) => {
+      const r = await repoEquipos.listar({ entregables: true, sinTope: true });
+      res.json({ filas: r.filas, total: r.total });
     }),
   );
 

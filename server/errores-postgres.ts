@@ -99,6 +99,10 @@ const REGLAS: Record<string, string> = {
     'Ya hay un acta emitida sobre esa entrega. Un movimiento se firma una vez: dos actas sobre la misma operación son dos papeles con distinto número, y el día que discrepen no habría forma de saber cuál vale.',
   actas_equipos_movimiento_del_mismo_equipo:
     'El movimiento indicado no es de ese equipo. Un acta solo puede documentar la operación del equipo que incluye.',
+  equipos_uso_exclusivo_sin_persona:
+    'Un equipo de préstamo interno o de eventos no puede estar a nombre de nadie ni reservado. Hay que devolverlo o liberarlo antes de marcarlo.',
+  equipos_eventos_no_se_presta:
+    'Un equipo exclusivo para eventos no se presta a otra empresa. Hay que recuperar el préstamo antes de marcarlo.',
   equipos_imei_formato: 'El IMEI son exactamente 15 dígitos.',
   equipos_imei_solo_moviles: 'Solo los celulares y las tablets llevan IMEI.',
   equipos_mouse_sin_serial_solo_desktop:

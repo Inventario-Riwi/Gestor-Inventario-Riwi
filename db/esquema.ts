@@ -81,6 +81,9 @@ export const categoriaEquipo = pgEnum('categoria_equipo', [
   'Tablet',
 ]);
 
+/** 0028. Equipos del pool que no se asignan a personas. */
+export const usoExclusivo = pgEnum('uso_exclusivo', ['Préstamo interno', 'Eventos']);
+
 export const propiedadEquipo = pgEnum('propiedad_equipo', ['Empresa', 'Cliente', 'Empleado']);
 
 export const licenciaTipo = pgEnum('licencia_tipo', [
@@ -501,6 +504,8 @@ export const equipos = pgTable(
     centro_entrenamiento: boolean('centro_entrenamiento').notNull().default(false),
     /** 0027. El puesto trae mouse, pero sin serial: no es un equipo propio. Solo Desktop. */
     mouse_sin_serial: boolean('mouse_sin_serial').notNull().default(false),
+    /** 0028. Préstamo interno o Eventos: del pool, no se asigna a nadie. */
+    uso_exclusivo: usoExclusivo('uso_exclusivo'),
   },
   (t) => [
     // 0024. Nadie es parte de sí mismo.
@@ -517,6 +522,14 @@ export const equipos = pgTable(
     check(
       'equipos_mouse_sin_serial_solo_desktop',
       sql`NOT mouse_sin_serial OR categoria::text = 'Desktop'`,
+    ),
+    check(
+      'equipos_uso_exclusivo_sin_persona',
+      sql`uso_exclusivo IS NULL OR (empleado_id IS NULL AND estado::text NOT IN ('Asignado', 'Reservado'))`,
+    ),
+    check(
+      'equipos_eventos_no_se_presta',
+      sql`uso_exclusivo IS NULL OR uso_exclusivo::text <> 'Eventos' OR (estado::text <> 'Prestado' AND prestado_a IS NULL)`,
     ),
     uniqueIndex('equipos_imei_uk')
       .on(t.imei)

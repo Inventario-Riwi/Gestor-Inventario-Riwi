@@ -38,6 +38,8 @@ export interface FiltrosEmpleados {
   estado?: string;
   pagina?: number;
   porPagina?: number;
+  /** Todas las filas, sin paginar. Solo para `GET /api/empleados/activos`. */
+  sinTope?: boolean;
 }
 
 export async function listar(f: FiltrosEmpleados = {}, bd: BD = db) {
@@ -60,7 +62,7 @@ export async function listar(f: FiltrosEmpleados = {}, bd: BD = db) {
   const porPagina = Math.min(Math.max(f.porPagina ?? 50, 1), 200);
   const pagina = Math.max(f.pagina ?? 1, 1);
 
-  const filas = await bd
+  const consulta = bd
     .select({
       ...CAMPOS_PUBLICOS,
       /**
@@ -87,9 +89,13 @@ export async function listar(f: FiltrosEmpleados = {}, bd: BD = db) {
     })
     .from(empleados)
     .where(donde)
-    .orderBy(asc(empleados.nombre))
-    .limit(porPagina)
-    .offset((pagina - 1) * porPagina);
+    .orderBy(asc(empleados.nombre));
+
+  // Sin tope solo para los desplegables de «elegir a alguien»: ver
+  // `GET /api/empleados/activos`. La pantalla de Colaboradores sigue paginada.
+  const filas = f.sinTope
+    ? await consulta
+    : await consulta.limit(porPagina).offset((pagina - 1) * porPagina);
 
   const [{ total }] = await bd
     .select({ total: sql<number>`count(*)::int` })

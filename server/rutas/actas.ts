@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { CHEQUEO_ITEMS } from '../../db/acta-formato.js';
 import * as repoActas from '../../db/repositorios/actas.js';
 import * as repoMovimientos from '../../db/repositorios/movimientos.js';
+import { EquipoDeUsoExclusivo, EquipoNoAsignable } from '../../db/transiciones.js';
 import { guardian } from '../autenticar.js';
 import { asincrono, ErrorHttp, noEncontrado } from '../errores.js';
 import { ruta } from '../permisos.js';
@@ -210,6 +211,11 @@ export function registrarRutasActas(app: Express): void {
         // lo de un remoto): la petición está incompleta, no el estado mal.
         if (e instanceof repoMovimientos.FaltaDato) {
           throw new ErrorHttp(400, e.message);
+        }
+        // Un equipo de uso exclusivo (0028) o de infraestructura (D44) metido en
+        // un acta de entrega: el mensaje dice cuál y qué hacer.
+        if (e instanceof EquipoDeUsoExclusivo || e instanceof EquipoNoAsignable) {
+          throw new ErrorHttp(409, e.message);
         }
 
         // Los dos del modo `ejecutar`. Los dos dicen QUÉ EQUIPO: un 409 que

@@ -123,6 +123,8 @@ export interface FiltrosEquipos {
   motivo?: string;
   /** 0024: solo los de centros de entrenamiento. */
   ce?: boolean;
+  /** 0028: solo los de ese uso exclusivo. */
+  uso?: string;
   pagina?: number;
   porPagina?: number;
 }
@@ -419,6 +421,10 @@ export const api = {
   transiciones: () => pedir<CatalogoTransiciones>('/api/transiciones'),
 
   /** 0024. A qué computador pertenece y qué partes tiene. */
+  /** Todo lo que se puede entregar (Disponible o Reservado, asignable), sin tope. */
+  equiposEntregables: () =>
+    pedir<{ filas: EquipoConMotivos[]; total: number }>('/api/equipos/entregables'),
+
   /** Conteos de las tarjetas de «Ubicaciones» (ver `lib/ubicaciones.ts`). */
   ubicaciones: () => pedir<ConteosUbicacion>('/api/ubicaciones'),
 
@@ -491,6 +497,14 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ activo: true }),
     }),
+  /**
+   * Todas las personas activas, sin paginar: para los desplegables de «¿a
+   * quién?». No usar `empleados({ porPagina })` para eso: tiene tope de 200 y
+   * corta la lista en silencio.
+   */
+  empleadosActivos: () =>
+    pedir<{ filas: EmpleadoConConteo[]; total: number }>('/api/empleados/activos'),
+
   desactivarEmpleado: (id: string) =>
     pedir<{ empleado: EmpleadoConConteo }>(`/api/empleados/${id}`, {
       method: 'PATCH',

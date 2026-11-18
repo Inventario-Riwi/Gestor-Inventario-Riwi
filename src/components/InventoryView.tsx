@@ -22,7 +22,7 @@ import type {
   EstadoEquipo,
   Sede,
 } from '../types';
-import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS } from '../types';
+import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS, USOS_EXCLUSIVOS } from '../types';
 import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
@@ -94,6 +94,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [ubicacion, setUbicacion] = useState<Tarjeta | null>(null);
   /** 0024: solo los equipos de centros de entrenamiento. */
   const [soloCe, setSoloCe] = useState(false);
+  /** 0028. '' = todos; si no, solo los de ese uso exclusivo. */
+  const [uso, setUso] = useState('');
   const [motivo, setMotivo] = useState('');
   const [pagina, setPagina] = useState(1);
 
@@ -182,6 +184,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         empresa,
         q: searchTerm,
         ce: soloCe || undefined,
+        uso: uso || undefined,
         pagina,
         porPagina,
       };
@@ -214,7 +217,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } finally {
       if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, pagina]);
+  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, pagina]);
 
   // En pausa mientras se editan los datos de un equipo: nada se refresca
   // debajo de un formulario a medio escribir.
@@ -268,7 +271,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // estando en la página 4 puede dejar la tabla vacía sin explicación.
   useEffect(
     () => setPagina(1),
-    [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe],
+    [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso],
   );
 
   const nombreSede = (id: string | null) =>
@@ -631,6 +634,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </option>
           ))}
         </select>
+        {/* 0028. Préstamo interno / Eventos. */}
+        <select
+          value={uso}
+          onChange={(e) => setUso(e.target.value)}
+          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
+        >
+          <option value="">Todos los usos</option>
+          {USOS_EXCLUSIVOS.map((u) => (
+            <option key={u} value={u}>
+              Solo {u.toLowerCase()}
+            </option>
+          ))}
+        </select>
         {/* 0024. Las salas de entrenamiento: un clic para verlas solas. */}
         <button
           type="button"
@@ -644,7 +660,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         >
           Centros de entrenamiento
         </button>
-        {(estado || categoria || (sede && !ubicacion?.sede) || searchTerm || motivo || soloCe) && (
+        {(estado || categoria || (sede && !ubicacion?.sede) || searchTerm || motivo || soloCe || uso) && (
           <button
             onClick={() => {
               setEstado('');
@@ -654,6 +670,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               setMotivo('');
               setSearchTerm('');
               setSoloCe(false);
+              setUso('');
             }}
             className="px-3 py-2 text-sm text-ink-muted hover:text-ink flex items-center gap-1"
           >
@@ -720,6 +737,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             title="Infraestructura: no se asigna, ni se reserva, ni se presta, ni sale en un acta. Mantenimiento sí aplica."
                           >
                             infra
+                          </span>
+                        )}
+                        {/* 0028. Del pool: no se asigna a personas. */}
+                        {e.uso_exclusivo && (
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-warn/15 text-ink border border-warn/50 font-semibold whitespace-nowrap"
+                            title={
+                              e.uso_exclusivo === 'Préstamo interno'
+                                ? 'Préstamo interno: se presta entre empresas; no se asigna ni se reserva a una persona.'
+                                : 'Eventos: no se asigna, ni se reserva, ni se presta.'
+                            }
+                          >
+                            {e.uso_exclusivo === 'Préstamo interno' ? 'préstamo interno' : 'eventos'}
                           </span>
                         )}
                       </div>
@@ -1044,6 +1074,7 @@ const Detalle: React.FC<{
                 [etiquetaDisco(tipoDe(equipo.categoria)), conGB(equipo.disco), 'disco'],
                 ['Pantalla', equipo.tamano_pantalla, 'tamano_pantalla'],
                 ['Condición', equipo.condicion],
+                ['Uso exclusivo', equipo.uso_exclusivo ?? 'Ninguno (se asigna normal)'],
                 ...(equipo.categoria === 'Desktop'
                   ? ([['Mouse sin serial', equipo.mouse_sin_serial ? 'Sí, lo trae' : 'No']] as [string, string][])
                   : []),

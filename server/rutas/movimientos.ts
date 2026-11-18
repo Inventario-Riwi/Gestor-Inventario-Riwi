@@ -33,6 +33,7 @@ import { estadoEquipo, prestatario } from '../../db/esquema.js';
 import {
   catalogoTransiciones,
   EquipoNoAsignable,
+  EquipoDeUsoExclusivo,
   OPERACIONES_DIRECTAS,
   TransicionIlegal,
   type Operacion,
@@ -97,6 +98,9 @@ function traducir(e: unknown): never {
    * marcado, y ofrecer una lista de alternativas que tampoco van a funcionar
    * sería mandar a quien lo recibe a probar una por una.
    */
+  if (e instanceof EquipoDeUsoExclusivo) {
+    throw new ErrorHttp(409, e.message, { operacion: e.operacion, uso_exclusivo: e.uso });
+  }
   if (e instanceof EquipoNoAsignable) {
     throw new ErrorHttp(409, e.message, { operacion: e.operacion, motivo: 'no_asignable' });
   }

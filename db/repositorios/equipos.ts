@@ -80,6 +80,7 @@ const CAMPOS_PUBLICOS = {
   equipo_principal_id: equipos.equipo_principal_id,
   centro_entrenamiento: equipos.centro_entrenamiento,
   mouse_sin_serial: equipos.mouse_sin_serial,
+  uso_exclusivo: equipos.uso_exclusivo,
   requiere_revision: equipos.requiere_revision,
   // 5e (D31). Que sea una lista cerrada tiene este precio: una columna nueva no
   // sale por la API hasta que se añade aquí, y el síntoma no dice «falta en la
@@ -108,9 +109,18 @@ export interface FiltrosEquipos {
   q?: string;
   /** 0024: solo los de centros de entrenamiento. */
   ce?: boolean;
+  /** 0028: solo los de ese uso exclusivo. */
+  uso?: string;
   revision?: boolean;
   /** Código de `motivos_revision`. Es para lo que existe la tabla puente. */
   motivo?: string;
+  /**
+   * Solo lo que se puede entregar a alguien: Disponible o Reservado, y
+   * asignable (D44). Lo pide `GET /api/equipos/entregables`.
+   */
+  entregables?: boolean;
+  /** Todas las filas, sin paginar. Solo para `GET /api/equipos/entregables`. */
+  sinTope?: boolean;
   pagina?: number;
   porPagina?: number;
 }
@@ -549,6 +559,13 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
   }
   if (f.revision !== undefined) condiciones.push(eq(equipos.requiere_revision, f.revision));
   if (f.ce !== undefined) condiciones.push(eq(equipos.centro_entrenamiento, f.ce));
+  if (f.uso) condiciones.push(eq(equipos.uso_exclusivo, f.uso as never));
+  if (f.entregables) {
+    condiciones.push(inArray(equipos.estado, ['Disponible', 'Reservado']));
+    condiciones.push(eq(equipos.asignable, true));
+    // 0028. Préstamo interno y Eventos son del pool: no se entregan a nadie.
+    condiciones.push(isNull(equipos.uso_exclusivo));
+  }
   if (f.motivo) {
     // EXISTS y no JOIN: un equipo con tres motivos aparecería tres veces, y el
     // total de la paginación contaría filas en vez de equipos.
@@ -585,13 +602,14 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
   const porPagina = Math.min(Math.max(f.porPagina ?? 50, 1), 200);
   const pagina = Math.max(f.pagina ?? 1, 1);
 
-  const filas = await bd
+  const consulta = bd
     .select(CAMPOS_PUBLICOS)
     .from(equipos)
     .where(donde)
-    .orderBy(equipos.etiqueta, equipos.id)
-    .limit(porPagina)
-    .offset((pagina - 1) * porPagina);
+    .orderBy(equipos.etiqueta, equipos.id);
+  const filas = f.sinTope
+    ? await consulta
+    : await consulta.limit(porPagina).offset((pagina - 1) * porPagina);
 
   const [{ total }] = await bd
     .select({ total: sql<number>`count(*)::int` })

@@ -182,7 +182,7 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
       // En paralelo: son tres lecturas independientes y encadenarlas solo
       // triplicaría la espera.
       const [e, q, s] = await Promise.all([
-        api.empleados({ porPagina: TOPE, activo: true }),
+        api.empleadosActivos(),
         api.equipos({ porPagina: TOPE }),
         api.sedes(),
       ]);
@@ -542,20 +542,10 @@ export const HandoverDocumentView: React.FC<HandoverDocumentViewProps> = ({
         </button>
       </div>
 
-      {/* El aviso decía «falta buscador» y el buscador es justo lo que trajo
-          5f-3. Pero solo lo trajo para los EQUIPOS: el desplegable de
-          colaboradores sigue cortado en los primeros {TOPE} y sin forma de
-          buscar, así que el aviso se acota en vez de borrarse.
-
-          Borrarlo entero habría dejado el problema de los colaboradores sin
-          nada que lo señale, que es peor que el aviso desactualizado. */}
-      {totales.empleados > TOPE && (
-        <p className="text-xs text-ink bg-warn/25 border border-warn rounded-lg px-3 py-2">
-          La lista de colaboradores muestra los primeros {TOPE} de{' '}
-          {totales.empleados} activos, y todavía no se puede buscar en ella: si quien recibe no
-          aparece, está más abajo del corte. Los equipos sí se pueden buscar, aquí debajo.
-        </p>
-      )}
+      {/* Aquí había un aviso de que la lista de colaboradores se cortaba en
+          los primeros 200. Ya no se corta: viene de `/api/empleados/activos`,
+          sin tope. Se quitó el aviso porque afirmaba algo que dejó de ser
+          verdad, no porque el problema se ignore. */}
 
       {/* Selectores */}
       <div className="bg-surface border border-line rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 shadow-sm">

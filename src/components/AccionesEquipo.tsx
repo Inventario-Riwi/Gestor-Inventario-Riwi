@@ -84,7 +84,7 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
 
   useEffect(() => {
     let vigente = true;
-    Promise.all([api.transiciones(), api.empleados({ porPagina: 200, activo: true }), api.sedes()])
+    Promise.all([api.transiciones(), api.empleadosActivos(), api.sedes()])
       .then(([t, e, s]) => {
         if (!vigente) return;
         setCatalogo(t);
@@ -133,7 +133,9 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
   const posibles =
     (equipo.asignable === false
       ? catalogo.por_estado_no_asignable[equipo.estado]
-      : catalogo.por_estado[equipo.estado]) ?? [];
+      : equipo.uso_exclusivo
+        ? catalogo.por_estado_uso[equipo.uso_exclusivo][equipo.estado]
+        : catalogo.por_estado[equipo.estado]) ?? [];
   const de = (op: Operacion) => catalogo.operaciones.find((o) => o.operacion === op)!;
 
   // Las que tienen endpoint propio se pintan como botón; las que las dispara

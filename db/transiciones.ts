@@ -317,6 +317,51 @@ export function operacionesDesde(estado: EstadoEquipo): Operacion[] {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 0028. Uso exclusivo: equipos del pool que no se asignan a personas
+// ---------------------------------------------------------------------------
+
+export const USOS_EXCLUSIVOS = ['Préstamo interno', 'Eventos'] as const;
+export type UsoExclusivo = (typeof USOS_EXCLUSIVOS)[number];
+
+/**
+ * De las operaciones que exigen un equipo asignable (`requiere_asignable`),
+ * cuáles SÍ se permiten con cada uso exclusivo. Lo demás de esa familia queda
+ * bloqueado: asignar, reasignar y reservar siempre; prestar, salvo en
+ * «Préstamo interno», que existe justo para prestarse entre empresas.
+ *
+ * Es la ÚNICA tabla de esta regla: de aquí salen el 409 de `mutar`, los
+ * botones de la ficha (`por_estado_uso` del catálogo) y lo que ofrece
+ * «Entregar equipos». Una lista igual en el cliente sería la copia que se
+ * separa (CLAUDE.md, el botón que daba 404).
+ */
+export const PERMITIDAS_CON_USO: Record<UsoExclusivo, readonly Operacion[]> = {
+  'Préstamo interno': ['prestar'],
+  Eventos: [],
+};
+
+export function bloqueadaPorUso(op: Operacion, uso: UsoExclusivo | null | undefined): boolean {
+  if (!uso) return false;
+  return Boolean(TRANSICIONES[op].requiere_asignable) && !PERMITIDAS_CON_USO[uso].includes(op);
+}
+
+/** La operación existe y el estado la permite, pero el equipo es de uso exclusivo. */
+export class EquipoDeUsoExclusivo extends Error {
+  constructor(
+    readonly operacion: Operacion,
+    readonly nombre: string,
+    readonly uso: UsoExclusivo,
+  ) {
+    super(
+      uso === 'Préstamo interno'
+        ? `${nombre} es de préstamo interno: se presta entre empresas, no se asigna ni se reserva a una persona. ` +
+            `Si ya no es de préstamo interno, hay que quitarle esa marca en su ficha.`
+        : `${nombre} es exclusivo para eventos: no se asigna, ni se reserva, ni se presta. ` +
+            `Si ya no es para eventos, hay que quitarle esa marca en su ficha.`,
+    );
+  }
+}
+
 /**
  * La tabla entera, en forma serializable, para que la interfaz pinte los
  * botones sin tener su propia copia.
@@ -362,6 +407,19 @@ export function catalogoTransiciones(estados: readonly EstadoEquipo[]) {
         operacionesDesde(e).filter((op) => !TRANSICIONES[op].requiere_asignable),
       ]),
     ) as Record<EstadoEquipo, Operacion[]>,
+    /**
+     * 0028. Lo mismo para un equipo de uso exclusivo, por uso. Calculado aquí
+     * por lo mismo que `por_estado_no_asignable`: la pantalla solo elige qué
+     * lista mirar.
+     */
+    por_estado_uso: Object.fromEntries(
+      USOS_EXCLUSIVOS.map((uso) => [
+        uso,
+        Object.fromEntries(
+          estados.map((e) => [e, operacionesDesde(e).filter((op) => !bloqueadaPorUso(op, uso))]),
+        ),
+      ]),
+    ) as Record<UsoExclusivo, Record<EstadoEquipo, Operacion[]>>,
     /** Estados a los que no llega ninguna operación. Ver arriba. */
     sin_operacion: ESTADOS_SIN_OPERACION,
   };

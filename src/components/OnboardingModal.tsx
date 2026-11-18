@@ -30,8 +30,11 @@ interface OnboardingModalProps {
  * estaban escritos a mano en el JSX, con stickers y tarjeta de bienvenida. No
  * existían en ninguna parte. Ahora los extras se eligen del inventario real, y
  * si no hay monitores disponibles la lista está vacía y lo dice.
+ *
+ * Los equipos vienen de `/api/equipos/entregables`, sin tope: antes era la
+ * primera página del inventario (200 por etiqueta) filtrada aquí, y con el
+ * inventario real los portátiles libres quedaban detrás del corte.
  */
-const TOPE = 200;
 
 /** Lo que se puede entregar: lo que no está en manos de nadie. */
 const ASIGNABLE = (e: EquipoConMotivos) => e.estado === 'Disponible' || e.estado === 'Reservado';
@@ -68,8 +71,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     let vigente = true;
     setErrorCarga(null);
     Promise.all([
-      api.empleados({ porPagina: TOPE, activo: true }),
-      api.equipos({ porPagina: TOPE }),
+      api.empleadosActivos(),
+      api.equiposEntregables(),
       api.sedes(),
     ]).then(
       ([e, q, s]) => {

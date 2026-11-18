@@ -524,8 +524,14 @@ export interface CatalogoTransiciones {
    * separarían — que es exactamente lo que este catálogo existe para evitar.
    */
   por_estado_no_asignable: Record<EstadoEquipo, Operacion[]>;
+  /** 0028. Por uso exclusivo: lo que queda tras quitar lo que ese uso bloquea. */
+  por_estado_uso: Record<UsoExclusivo, Record<EstadoEquipo, Operacion[]>>;
   sin_operacion: EstadoEquipo[];
 }
+
+/** 0028. Equipos del pool que no se asignan a personas. */
+export const USOS_EXCLUSIVOS = ['Préstamo interno', 'Eventos'] as const;
+export type UsoExclusivo = (typeof USOS_EXCLUSIVOS)[number];
 
 /**
  * Una fila de `GET /api/traslados`: un equipo que está viajando ahora mismo.
@@ -725,6 +731,8 @@ export const ESTADOS_EMPLEADO = ['Activo', 'Onboarding', 'Offboarding', 'Inactiv
 // Si alguien añade un valor al enum de la base y no lo añade aquí —o al revés—
 // esto deja de compilar. Es el único punto donde la copia podría separarse.
 type _c1 = Comprobar<Igual<(typeof CATEGORIAS_EQUIPO)[number], CategoriaEquipo>>;
+// 0028. La copia de los usos exclusivos no puede separarse del enum de la base.
+type _c14 = Comprobar<Igual<UsoExclusivo, NonNullable<FilaEquipo['uso_exclusivo']>>>;
 type _c2 = Comprobar<Igual<(typeof ESTADOS_EQUIPO)[number], EstadoEquipo>>;
 type _c3 = Comprobar<Igual<(typeof CONDICIONES_EQUIPO)[number], CondicionEquipo>>;
 type _c4 = Comprobar<Igual<(typeof PROPIEDADES_EQUIPO)[number], PropiedadEquipo>>;

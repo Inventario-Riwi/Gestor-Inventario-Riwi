@@ -180,6 +180,30 @@ export function registrarRutasEmpleados(app: Express): void {
     }),
   );
 
+  /**
+   * Todas las personas activas, sin paginar, para los desplegables de «¿a
+   * quién?» (asignar, nuevo equipo, entregar, actas, bandeja).
+   *
+   * Existe porque esos desplegables pedían `porPagina: 200`, el tope del
+   * listado, y con más de 200 personas la lista se cortaba en orden
+   * alfabético —a la altura de «Santiago Lemus»—: a quien venía después no se
+   * le podía asignar nada, y no había ningún aviso. La bandeja pedía 300, el
+   * esquema lo rechazaba con 400 y su desplegable salía vacío.
+   *
+   * Va ANTES de `/api/empleados/:id`: si no, «activos» se leería como un id.
+   */
+  ruta(
+    app,
+    'get',
+    '/api/empleados/activos',
+    'autenticado',
+    guardian,
+    asincrono(async (_req, res) => {
+      const r = await repoEmpleados.listar({ activo: true, sinTope: true });
+      res.json({ filas: r.filas, total: r.total });
+    }),
+  );
+
   ruta(
     app,
     'get',

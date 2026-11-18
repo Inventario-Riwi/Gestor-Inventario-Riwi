@@ -33,9 +33,6 @@ interface NewDeviceModalProps {
   onCreado: () => void;
 }
 
-/** El tope que acepta la API. Ver `porPagina` en `server/rutas/equipos.ts`. */
-const TOPE = 200;
-
 const ICONO: Record<Tipo, React.ElementType> = {
   portatil: Laptop,
   mesa: Monitor,
@@ -140,7 +137,7 @@ export const NewDeviceModal: React.FC<NewDeviceModalProps> = ({ isOpen, onClose,
   useEffect(() => {
     if (!isOpen) return;
     let vigente = true;
-    Promise.all([api.sedes(), api.empleados({ porPagina: TOPE, activo: true })]).then(
+    Promise.all([api.sedes(), api.empleadosActivos()]).then(
       ([s, e]) => {
         if (!vigente) return;
         setSedes(s.sedes);

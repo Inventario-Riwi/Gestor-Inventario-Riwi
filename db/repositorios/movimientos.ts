@@ -30,6 +30,8 @@ import { empleados, equipos, movimientos, prestatario, sedes, usuariosApp } from
 import {
   comprobarTransicion,
   EquipoNoAsignable,
+  EquipoDeUsoExclusivo,
+  bloqueadaPorUso,
   type EstadoEquipo,
   type Operacion,
   type TipoMovimiento,
@@ -127,6 +129,8 @@ export async function mutar(
         prestado_a: equipos.prestado_a,
         // D44: si no se asigna, cuatro de las once operaciones no valen.
         asignable: equipos.asignable,
+        // 0028. Préstamo interno / Eventos: del pool, no se entrega a nadie.
+        uso_exclusivo: equipos.uso_exclusivo,
         etiqueta: equipos.etiqueta,
         serial: equipos.serial,
       })
@@ -150,6 +154,16 @@ export async function mutar(
      * Y va DESPUÉS de `comprobarTransicion`: si la operación ni siquiera es
      * legal desde ese estado, eso es lo primero que hay que contar.
      */
+    // 0028. Mismo lugar y misma razón que D44 de abajo: antes de tocar nada, y
+    // con un mensaje que diga qué hacer en vez del 409 genérico de la CHECK.
+    if (bloqueadaPorUso(operacion, actual.uso_exclusivo)) {
+      throw new EquipoDeUsoExclusivo(
+        operacion,
+        actual.etiqueta ?? actual.serial ?? 'El equipo',
+        actual.uso_exclusivo!,
+      );
+    }
+
     if (t.requiere_asignable && !actual.asignable) {
       throw new EquipoNoAsignable(
         operacion,

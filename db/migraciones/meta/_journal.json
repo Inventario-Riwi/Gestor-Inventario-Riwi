@@ -197,6 +197,13 @@
       "when": 1786615200000,
       "tag": "0027_mouse_sin_serial",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786618800000,
+      "tag": "0028_uso_exclusivo",
+      "breakpoints": true
     }
   ]
 }

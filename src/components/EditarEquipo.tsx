@@ -7,6 +7,7 @@ import {
   EMPRESAS,
   PROPIEDADES_EQUIPO,
   TIPOS_LICENCIA,
+  USOS_EXCLUSIVOS,
 } from '../types';
 import { api, ErrorApi } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
@@ -52,6 +53,8 @@ type Datos = Record<Texto, string> & {
   condicion: string;
   /** 0027. Solo Desktop. */
   mouse_sin_serial: boolean;
+  /** 0028. '' = ninguno. */
+  uso_exclusivo: string;
 };
 
 const desde = (e: EquipoConMotivos): Datos => ({
@@ -73,6 +76,7 @@ const desde = (e: EquipoConMotivos): Datos => ({
   tamano_pantalla: e.tamano_pantalla ?? '',
   condicion: e.condicion ?? '',
   mouse_sin_serial: e.mouse_sin_serial ?? false,
+  uso_exclusivo: e.uso_exclusivo ?? '',
   costo: e.costo ?? '',
 });
 
@@ -229,6 +233,24 @@ export const EditarEquipo: React.FC<{
         {lleva('tamano_pantalla') && texto('Pantalla', 'tamano_pantalla', 'p. ej. 14"')}
         {!esComputo && lista('Condición', 'condicion', CONDICIONES_EQUIPO, true)}
         {texto('Costo (COP)', 'costo', 'p. ej. 3500000')}
+        <label className="text-xs text-ink-muted space-y-1">
+          <span>Uso exclusivo</span>
+          <select
+            value={datos.uso_exclusivo}
+            onChange={(e) => poner('uso_exclusivo', e.target.value)}
+            className={clase}
+          >
+            <option value="">Ninguno (se asigna normal)</option>
+            {USOS_EXCLUSIVOS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+          <span className="block text-[11px]">
+            Préstamo interno y Eventos son del pool: no se asignan ni se reservan a una persona.
+          </span>
+        </label>
         {datos.categoria === 'Desktop' && (
           <label className="text-xs text-ink flex items-center gap-2 col-span-2">
             <input
