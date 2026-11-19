@@ -218,7 +218,7 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       mensaje: t.irreversible ? (
         <>
           <strong className="text-ink">Queda fuera de circulación:</strong> sigue en el inventario
-          con su historial completo. Si la baja fue un error, se puede revertir desde su ficha, y
+          con su historial completo. Si la baja fue un error, se recupera desde su ficha con «Recuperar de baja», y
           eso también queda en el historial.
         </>
       ) : (

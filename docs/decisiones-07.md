@@ -428,7 +428,7 @@ circulación y asignárselo a una persona. Sin una operación, la única salida 
 un UPDATE a mano, que deja el estado sin movimiento que lo explique (D19,
 `verificar-datos.sql` §F2).
 
-- `revertir_baja` en `db/transiciones.ts`: de `De baja` a `Disponible`, con el
+- `revertir_baja` en `db/transiciones.ts` (botón «Recuperar de baja»): de `De baja` a `Disponible`, con el
   movimiento nuevo `Reversión de baja` (migración 0029).
 - Vuelve a **Disponible**, no a Asignado: «la baja fue un error» y «se le
   entrega a alguien» son dos hechos, y el historial los cuenta como dos, igual

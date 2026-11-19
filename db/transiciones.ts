@@ -185,7 +185,7 @@ export const TRANSICIONES: Record<Operacion, Transicion> = {
     movimiento: 'Reversión de baja',
     disparo: 'directa',
     requiere: null,
-    etiqueta: 'Revertir baja',
+    etiqueta: 'Recuperar de baja',
     explicacion:
       'Solo se revierte la baja de un equipo dado de baja: vuelve a quedar disponible, con su historial completo.',
   },
