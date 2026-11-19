@@ -30,6 +30,7 @@ import { SalasEntrenamiento } from './SalasEntrenamiento';
 import { Ubicaciones } from './Ubicaciones';
 import type { Tarjeta } from '../lib/ubicaciones';
 import { esPeriferico, identificador, nombreVisible } from '../lib/nombre-equipo';
+import { CLASES, claseDe, ETIQUETA_CLASE, type Clase } from '../../db/clases-equipo';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
@@ -96,6 +97,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [soloCe, setSoloCe] = useState(false);
   /** 0028. '' = todos; si no, solo los de ese uso exclusivo. */
   const [uso, setUso] = useState('');
+  /**
+   * D54. Equipos y periféricos no van mezclados: se abre en «Equipos», los
+   * objetos principales, y los periféricos están a un clic con su número.
+   * '' = los dos juntos, como antes.
+   */
+  const [clase, setClase] = useState<Clase | ''>('equipo');
+  const [conteosClase, setConteosClase] = useState<Record<Clase, number> | null>(null);
   const [motivo, setMotivo] = useState('');
   const [pagina, setPagina] = useState(1);
 
@@ -187,6 +195,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         // entrenamiento (conteoUbicaciones): su lista tampoco las enseña.
         ce: ubicacion ? false : soloCe || undefined,
         uso: uso || undefined,
+        clase: clase || undefined,
         pagina,
         porPagina,
       };
@@ -200,6 +209,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       // Solo la bandeja trae los conteos por motivo; el listado general no.
       if ('conteos' in datos) setConteos(datos.conteos as ConteoMotivo[]);
       setConteosEmpresa(datos.conteos_empresa);
+      if ('conteos_clase' in datos && datos.conteos_clase) setConteosClase(datos.conteos_clase);
       setError(null);
       // La ficha abierta se pone al día solo si de verdad cambió y nadie la
       // está editando. Si el equipo ya no viene en esta página, la ficha
@@ -219,7 +229,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } finally {
       if (!silencioso && pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, pagina, ubicacion]);
+  }, [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, clase, pagina, ubicacion]);
 
   // En pausa mientras se editan los datos de un equipo: nada se refresca
   // debajo de un formulario a medio escribir.
@@ -273,7 +283,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // estando en la página 4 puede dejar la tabla vacía sin explicación.
   useEffect(
     () => setPagina(1),
-    [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso],
+    [pestana, estado, categoria, sede, empresa, motivo, searchTerm, soloCe, uso, clase],
   );
 
   const nombreSede = (id: string | null) =>
@@ -314,6 +324,37 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </button>
         </div>
       </header>
+
+      {/* D54. Equipos y periféricos, como dos nombres aparte. Va arriba de
+          todo lo demás porque es la primera pregunta: ¿busco un portátil o un
+          mouse? Cambiar de clase suelta la categoría si no es de la nueva. */}
+      {pestana !== 'salas' && !(pestana === 'ubicaciones' && !ubicacion) && (
+        <div role="tablist" aria-label="Clase de objeto" className="inline-flex p-1 rounded-xl bg-surface-alt border border-line">
+          {([...CLASES, ''] as const).map((c) => {
+            const activa = clase === c;
+            const n = c ? conteosClase?.[c] : conteosClase ? conteosClase.equipo + conteosClase.periferico : undefined;
+            return (
+              <button
+                key={c || 'todo'}
+                role="tab"
+                aria-selected={activa}
+                onClick={() => {
+                  setClase(c);
+                  if (c && categoria && claseDe(categoria) !== c) setCategoria('');
+                }}
+                className={`px-4 py-1.5 text-sm rounded-lg font-medium flex items-center gap-2 transition-[background-color,color,transform] duration-150 active:scale-[0.97] ${
+                  activa ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {c ? ETIQUETA_CLASE[c] : 'Todo'}
+                {n !== undefined && (
+                  <span className={`text-xs tabular-nums ${activa ? 'text-brand' : ''}`}>{n}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Las empresas, como bloques y no como un desplegable más.
           Mismo mecanismo que la bandeja de motivos y que el de colaboradores
@@ -616,8 +657,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           onChange={(e) => setCategoria(e.target.value as CategoriaEquipo | '')}
           className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
         >
-          <option value="">Todas las categorías</option>
-          {CATEGORIAS_EQUIPO.map((c) => (
+          <option value="">
+            {clase ? `Todos los ${ETIQUETA_CLASE[clase].toLowerCase()}` : 'Todas las categorías'}
+          </option>
+          {/* D54: solo las categorías de la clase elegida. */}
+          {CATEGORIAS_EQUIPO.filter((c) => !clase || claseDe(c) === clase).map((c) => (
             <option key={c} value={c}>
               {c}
             </option>

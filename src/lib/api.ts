@@ -42,6 +42,8 @@ import type {
   UsuarioSesion,
 } from '../types';
 
+import type { Clase } from '../../db/clases-equipo';
+
 /** Serializa filtros a query string, saltándose los vacíos. */
 function consulta(f: Record<string, unknown>): string {
   const p = new URLSearchParams();
@@ -122,11 +124,12 @@ export interface FiltrosEquipos {
   empresa?: string;
   q?: string;
   motivo?: string;
-  /** 0024: solo los de centros de entrenamiento. */
   /** D53: sin él, solo staff; `true` solo salas; `'todos'` los dos. */
   ce?: boolean | 'todos';
   /** 0028: solo los de ese uso exclusivo. */
   uso?: string;
+  /** D54: equipos o periféricos. */
+  clase?: Clase;
   pagina?: number;
   porPagina?: number;
 }
@@ -187,9 +190,13 @@ export const api = {
       if (v !== undefined && v !== '' && v !== null) p.set(k, String(v));
     }
     const cadena = p.toString();
-    return pedir<Pagina<EquipoConMotivos> & { conteos_empresa: Record<string, number> }>(
-      `/api/equipos${cadena ? `?${cadena}` : ''}`,
-    );
+    return pedir<
+      Pagina<EquipoConMotivos> & {
+        conteos_empresa: Record<string, number>;
+        /** D54. Solo en `/api/equipos`, no en la bandeja. */
+        conteos_clase?: Record<Clase, number>;
+      }
+    >(`/api/equipos${cadena ? `?${cadena}` : ''}`);
   },
 
   /** Cerrar un motivo de la bandeja. Con el último, la marca baja sola. */

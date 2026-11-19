@@ -37,6 +37,7 @@ import {
   segundaSede,
   contarEmpleadosActivosSql,
   contarEquiposSql,
+  equiposPorClaseSql,
   equiposEmpresaSedeSql,
   equiposEnSedeSql,
   borrarSedes,
@@ -1986,6 +1987,74 @@ describe('ubicaciones: conteos por empresa y sede', () => {
     sedesCreadas.push((r.cuerpo as { sede: { id: string } }).sede.id);
     const otra = await c.post('/api/sedes', { nombre, ciudad: 'Armenia' });
     assert.equal(otra.estado, 409);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D54: equipos y periféricos, aparte
+// ---------------------------------------------------------------------------
+//
+// Escrito desde el pedido: «que los equipos no se concentren en un solo nombre,
+// sino equipos como portátiles y desktop, y periféricos como un nombre aparte».
+// Por los dos lados: cada clase trae lo suyo y no lo de la otra, y los
+// conteos cuadran con SQL.
+
+describe('equipos y periféricos: dos clases aparte (D54)', () => {
+  const suite = ambito('clase');
+  let admin: UsuarioDePrueba;
+  const creados: string[] = [];
+  let c: Cliente;
+  let portatil: string;
+  let mouse: string;
+
+  before(async () => {
+    admin = await suite.crearUsuario({ sufijo: 'admin', rol: 'admin' });
+    c = nuevo();
+    await c.entrar(admin.email, admin.password);
+    for (const [etq, categoria] of [['PC', 'Portátil'], ['MS', 'Mouse']] as const) {
+      const r = await c.post('/api/equipos', {
+        categoria,
+        etiqueta: `${suite.prefijo}${etq}`,
+        serial: `SN-${suite.prefijo}${etq}`,
+        estado: 'Disponible',
+      });
+      assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+      creados.push((r.cuerpo as { equipo: { id: string } }).equipo.id);
+    }
+    [portatil, mouse] = creados;
+  });
+
+  after(async () => {
+    await borrarEquipos(creados);
+    await suite.limpiar();
+  });
+
+  const ids = async (clase: string) => {
+    const r = await c.get(`/api/equipos?clase=${clase}&q=${suite.prefijo}`);
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    return (r.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id);
+  };
+
+  it('«equipo» trae el portátil y no el mouse; «periferico», al revés', async () => {
+    const equipos = await ids('equipo');
+    assert.ok(equipos.includes(portatil) && !equipos.includes(mouse));
+    const perifericos = await ids('periferico');
+    assert.ok(perifericos.includes(mouse) && !perifericos.includes(portatil));
+  });
+
+  it('una clase que no existe es 400, no una lista vacía', async () => {
+    assert.equal((await c.get('/api/equipos?clase=otra')).estado, 400);
+  });
+
+  it('los conteos por clase cuadran con SQL y suman el total del staff', async () => {
+    const r = (await c.get('/api/equipos?porPagina=1')).cuerpo as {
+      total: number;
+      conteos_clase: { equipo: number; periferico: number };
+    };
+    const enSql = await equiposPorClaseSql();
+    assert.equal(r.conteos_clase.equipo, enSql.equipo);
+    assert.equal(r.conteos_clase.periferico, enSql.periferico);
+    assert.equal(r.conteos_clase.equipo + r.conteos_clase.periferico, r.total);
   });
 });
 

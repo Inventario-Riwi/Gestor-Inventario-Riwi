@@ -20,7 +20,9 @@
  * un `.select()` sin argumentos. El comentario avisa; el test es lo que impide.
  */
 
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm';
+
+import { CATEGORIAS_PRINCIPALES, type Clase } from '../clases-equipo.js';
 
 import { db, type BD, type Ejecutor } from '../cliente.js';
 import { descifrar } from '../cifrado.js';
@@ -116,6 +118,8 @@ export interface FiltrosEquipos {
   ce?: boolean | 'todos';
   /** 0028: solo los de ese uso exclusivo. */
   uso?: string;
+  /** D54: equipos (portátil, desktop, celular, tablet) o periféricos. */
+  clase?: Clase;
   revision?: boolean;
   /** Código de `motivos_revision`. Es para lo que existe la tabla puente. */
   motivo?: string;
@@ -174,6 +178,28 @@ export async function conteoPorEmpresa(
     if (fila.empresa in base || n > 0) base[fila.empresa] = n;
   }
   return base;
+}
+
+/**
+ * D54. Cuántos equipos y cuántos periféricos hay, para el selector de
+ * Inventario. Con la misma regla de salas que la lista (D53): sin `ce`, staff.
+ * Los dos números siempre vienen, aunque uno sea cero.
+ */
+export async function conteoPorClase(
+  ce: boolean | 'todos' = false,
+  bd: BD = db,
+): Promise<Record<Clase, number>> {
+  const condiciones: SQL[] = [];
+  if (ce !== 'todos') condiciones.push(eq(equipos.centro_entrenamiento, ce));
+  const principal = inArray(equipos.categoria, [...CATEGORIAS_PRINCIPALES]);
+  const [fila] = await bd
+    .select({
+      equipo: sql<number>`count(*) FILTER (WHERE ${principal})::int`,
+      periferico: sql<number>`count(*) FILTER (WHERE NOT ${principal})::int`,
+    })
+    .from(equipos)
+    .where(condiciones.length ? and(...condiciones) : undefined);
+  return { equipo: Number(fila?.equipo ?? 0), periferico: Number(fila?.periferico ?? 0) };
 }
 
 /**
@@ -573,6 +599,9 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
   // D53: sin `ce`, solo staff. Las salas no se mezclan con el resto.
   if (f.ce !== 'todos') condiciones.push(eq(equipos.centro_entrenamiento, f.ce ?? false));
   if (f.uso) condiciones.push(eq(equipos.uso_exclusivo, f.uso as never));
+  // D54. La lista sale de `db/clases-equipo.ts`, la misma que usa la pantalla.
+  if (f.clase === 'equipo') condiciones.push(inArray(equipos.categoria, [...CATEGORIAS_PRINCIPALES]));
+  if (f.clase === 'periferico') condiciones.push(notInArray(equipos.categoria, [...CATEGORIAS_PRINCIPALES]));
   if (f.entregables) {
     condiciones.push(inArray(equipos.estado, ['Disponible', 'Reservado']));
     condiciones.push(eq(equipos.asignable, true));

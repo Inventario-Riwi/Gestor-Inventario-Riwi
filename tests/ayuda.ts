@@ -970,6 +970,21 @@ export async function contarEquiposSql(): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/**
+ * Equipos y periféricos del staff, contado en SQL (D54). Las categorías van
+ * escritas aquí a propósito, desde la decisión y no desde `clases-equipo.ts`:
+ * si alguien cambia la lista del código, este número no se mueve con ella.
+ */
+export async function equiposPorClaseSql(): Promise<{ equipo: number; periferico: number }> {
+  const r = await db.execute<{ equipo: string; periferico: string }>(
+    sql`SELECT
+          count(*) FILTER (WHERE equipos.categoria::text IN ('Portátil', 'Desktop', 'Celular', 'Tablet'))::text AS equipo,
+          count(*) FILTER (WHERE equipos.categoria::text NOT IN ('Portátil', 'Desktop', 'Celular', 'Tablet'))::text AS periferico
+        FROM equipos WHERE NOT equipos.centro_entrenamiento`,
+  );
+  return { equipo: Number(r.rows[0]?.equipo ?? 0), periferico: Number(r.rows[0]?.periferico ?? 0) };
+}
+
 /** Cuántas personas activas hay, contado en SQL: contra esto se contrasta `GET /api/empleados/activos`. */
 export async function contarEmpleadosActivosSql(): Promise<number> {
   const r = await db.execute<{ n: string }>(

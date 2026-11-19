@@ -23,6 +23,7 @@ import {
   propiedadEquipo,
   usoExclusivo,
 } from '../../db/esquema.js';
+import { CLASES } from '../../db/clases-equipo.js';
 import { sinMarcador } from '../../db/marcadores.js';
 import { CODIGOS } from '../../db/motivos.js';
 import { guardian } from '../autenticar.js';
@@ -198,6 +199,8 @@ const esquemaFiltros = z.object({
   q: z.string().trim().max(120).optional(),
   /** 0028: solo los de ese uso exclusivo. */
   uso: z.enum(usoExclusivo.enumValues).optional(),
+  /** D54: equipos o periféricos. */
+  clase: z.enum(CLASES).optional(),
   /**
    * Salas de entrenamiento (D53). Sin él, solo staff: las salas van aparte en
    * todo el inventario. `true` solo salas; `todos` los dos (vincular licencias).
@@ -237,11 +240,12 @@ export function registrarRutasEquipos(app: Express): void {
       // Los conteos por empresa viajan con el listado, igual que los de motivo
       // en la bandeja y los de colaboradores (D28): un número delante es lo que
       // hace que «Sin clasificar» se vea sin ir a buscarlo.
-      const [pagina, conteos] = await Promise.all([
+      const [pagina, conteos, clases] = await Promise.all([
         repoEquipos.listar(f),
         repoEquipos.conteoPorEmpresa(f.ce ?? false),
+        repoEquipos.conteoPorClase(f.ce ?? false),
       ]);
-      res.json({ ...pagina, conteos_empresa: conteos });
+      res.json({ ...pagina, conteos_empresa: conteos, conteos_clase: clases });
     }),
   );
 

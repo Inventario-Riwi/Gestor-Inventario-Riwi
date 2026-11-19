@@ -458,3 +458,17 @@ con el staff.
   equipos de sala en una línea aparte.
 - **Disponibles**: botón del dashboard que lleva a lo Disponible del staff, en
   dos bloques (equipos y periféricos), con solo dos filtros: sede y empresa.
+
+## D54. Equipos y periféricos, dos nombres aparte
+
+Pedido del usuario: «que los equipos no se concentren en un solo nombre, sino
+equipos como portátiles y desktop, y periféricos como un nombre aparte».
+
+- **Equipos**: Portátil, Desktop, Celular y Tablet, los objetos principales.
+  **Periféricos**: todo lo demás (Monitor, Teclado, Mouse, Diadema, Otro), y
+  también cualquier categoría nueva, para que no desaparezca de los dos lados.
+- La lista vive en `db/clases-equipo.ts`, una sola vez: la leen el filtro
+  `clase` de `GET /api/equipos`, el selector de Inventario y `esPeriferico`.
+- Inventario abre en **Equipos**, con «Periféricos» y «Todo» a un clic y su
+  número al lado (`conteos_clase`, con la misma regla de salas que la lista,
+  D53). El desplegable de categoría solo ofrece las de la clase elegida.

@@ -1,5 +1,5 @@
 import type { CategoriaEquipo } from '../types';
-import { tipoDe } from './tipos-equipo';
+import { claseDe } from '../../db/clases-equipo';
 
 /**
  * Cómo se llama un equipo en pantalla. Una sola regla para todas las vistas.
@@ -20,7 +20,8 @@ export interface Nombrable {
   modelo?: string | null;
 }
 
-export const esPeriferico = (c: CategoriaEquipo) => tipoDe(c) === 'periferico';
+/** D54: la clase sale de `db/clases-equipo.ts`, la misma regla que el filtro. */
+export const esPeriferico = (c: CategoriaEquipo) => claseDe(c) === 'periferico';
 
 export function nombreVisible(e: Nombrable): string {
   const marcaModelo = [e.marca, e.modelo].filter(Boolean).join(' ');
