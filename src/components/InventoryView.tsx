@@ -10,7 +10,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -22,7 +21,7 @@ import type {
   EstadoEquipo,
   Sede,
 } from '../types';
-import { CATEGORIAS_EQUIPO, ESTADOS_EQUIPO, MOTIVOS, USOS_EXCLUSIVOS } from '../types';
+import { MOTIVOS } from '../types';
 import { etiquetaDisco, TIPOS, tipoDe, type CampoTecnico } from '../lib/tipos-equipo';
 import { api, ErrorApi, type ConteoMotivo } from '../lib/api';
 import { SIN_GUARDAR, useConfirmacion, type ControlSinGuardar } from './Confirmacion';
@@ -30,10 +29,11 @@ import { SalasEntrenamiento } from './SalasEntrenamiento';
 import { Ubicaciones } from './Ubicaciones';
 import type { Tarjeta } from '../lib/ubicaciones';
 import { esPeriferico, identificador, nombreVisible } from '../lib/nombre-equipo';
-import { CLASES, claseDe, ETIQUETA_CLASE, type Clase } from '../../db/clases-equipo';
+import type { Clase } from '../../db/clases-equipo';
 import { estiloEmpresa, etiquetaEmpresa } from '../lib/empresas';
 import { INTERVALO_SONDEO_MS, useSondeo } from '../lib/sondeo';
 import { AccionesEquipo } from './AccionesEquipo';
+import { FiltrosInventario } from './FiltrosInventario';
 import { ConjuntoEquipo } from './ConjuntoEquipo';
 import { EditarEquipo } from './EditarEquipo';
 import { HistorialEquipo } from './HistorialEquipo';
@@ -325,79 +325,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       </header>
 
-      {/* D54. Equipos y periféricos, como dos nombres aparte. Va arriba de
-          todo lo demás porque es la primera pregunta: ¿busco un portátil o un
-          mouse? Cambiar de clase suelta la categoría si no es de la nueva. */}
-      {pestana !== 'salas' && !(pestana === 'ubicaciones' && !ubicacion) && (
-        <div role="tablist" aria-label="Clase de objeto" className="inline-flex p-1 rounded-xl bg-surface-alt border border-line">
-          {([...CLASES, ''] as const).map((c) => {
-            const activa = clase === c;
-            const n = c ? conteosClase?.[c] : conteosClase ? conteosClase.equipo + conteosClase.periferico : undefined;
-            return (
-              <button
-                key={c || 'todo'}
-                role="tab"
-                aria-selected={activa}
-                onClick={() => {
-                  setClase(c);
-                  if (c && categoria && claseDe(categoria) !== c) setCategoria('');
-                }}
-                className={`px-4 py-1.5 text-sm rounded-lg font-medium flex items-center gap-2 transition-[background-color,color,transform] duration-150 active:scale-[0.97] ${
-                  activa ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                {c ? ETIQUETA_CLASE[c] : 'Todo'}
-                {n !== undefined && (
-                  <span className={`text-xs tabular-nums ${activa ? 'text-brand' : ''}`}>{n}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Las empresas, como bloques y no como un desplegable más.
-          Mismo mecanismo que la bandeja de motivos y que el de colaboradores
-          (D28): un número delante es lo que hace que «Sin clasificar» se vea
-          sin ir a buscarlo. */}
-      {conteosEmpresa && pestana !== 'salas' && pestana !== 'ubicaciones' && (
-        <div className="flex flex-wrap items-center gap-2">
-          {Object.entries(conteosEmpresa).map(([nombre, n]) => {
-            const activa = empresa === nombre;
-            const pendiente = nombre === 'Sin clasificar' && n > 0;
-            const estilo = estiloEmpresa(nombre);
-            return (
-              <button
-                key={nombre}
-                onClick={() => setEmpresa(activa ? '' : nombre)}
-                className={`px-3 py-1.5 text-xs rounded-lg border flex items-center gap-2 transition-colors ${
-                  activa
-                    ? (estilo?.activo ?? 'bg-brand text-white border-brand')
-                    : pendiente
-                      ? 'border-warn/50 bg-warn/10 text-ink hover:bg-warn/20'
-                      : (estilo?.chip ?? 'border-line text-ink-muted hover:bg-surface-alt')
-                }`}
-              >
-                {pendiente && <AlertTriangle className="w-3.5 h-3.5 text-warn" />}
-                {etiquetaEmpresa(nombre)}
-                <span className="font-semibold tabular-nums">{n}</span>
-              </button>
-            );
-          })}
-          {empresa && (
-            <button
-              onClick={() => setEmpresa('')}
-              className="text-xs text-ink-muted hover:text-ink px-2"
-            >
-              Quitar filtro
-            </button>
-          )}
-          <span className="text-[11px] text-ink-muted">
-            Un equipo prestado cuenta en las dos: en la de su dueño y en la de quien lo tiene.
-          </span>
-        </div>
-      )}
-
       <div className="flex items-center gap-1 border-b border-line">
         {(['todos', 'revision', 'ubicaciones', 'salas'] as const).map((p) => (
           <button
@@ -630,105 +557,34 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Etiqueta, serial, nombre, marca, modelo o persona…"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink focus:outline-none focus:border-brand"
-          />
-        </div>
-        <select
-          value={estado}
-          onChange={(e) => setEstado(e.target.value as EstadoEquipo | '')}
-          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
-        >
-          <option value="">Todos los estados</option>
-          {ESTADOS_EQUIPO.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={categoria}
-          onChange={(e) => setCategoria(e.target.value as CategoriaEquipo | '')}
-          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
-        >
-          <option value="">
-            {clase ? `Todos los ${ETIQUETA_CLASE[clase].toLowerCase()}` : 'Todas las categorías'}
-          </option>
-          {/* D54: solo las categorías de la clase elegida. */}
-          {CATEGORIAS_EQUIPO.filter((c) => !clase || claseDe(c) === clase).map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sede}
-          onChange={(e) => setSede(e.target.value)}
-          // Dentro de una tarjeta con sede, la sede la fija la tarjeta.
-          disabled={!!ubicacion?.sede}
-          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
-        >
-          <option value="">Todas las sedes</option>
-          {sedes.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nombre}
-            </option>
-          ))}
-        </select>
-        {/* 0028. Préstamo interno / Eventos. */}
-        <select
-          value={uso}
-          onChange={(e) => setUso(e.target.value)}
-          className="px-3 py-2 text-sm border border-line rounded-lg bg-surface text-ink"
-        >
-          <option value="">Todos los usos</option>
-          {USOS_EXCLUSIVOS.map((u) => (
-            <option key={u} value={u}>
-              Solo {u.toLowerCase()}
-            </option>
-          ))}
-        </select>
-        {/* 0024. Las salas de entrenamiento: un clic para verlas solas. No
-            dentro de una tarjeta de «Empresas y sedes», que las excluye. */}
-        {!ubicacion && (
-        <button
-          type="button"
-          onClick={() => setSoloCe((v) => !v)}
-          aria-pressed={soloCe}
-          className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-            soloCe
-              ? 'bg-riwi text-white border-riwi'
-              : 'border-line bg-surface text-ink hover:bg-surface-alt'
-          }`}
-        >
-          Centros de entrenamiento
-        </button>
-        )}
-        {(estado || categoria || (sede && !ubicacion?.sede) || searchTerm || motivo || soloCe || uso) && (
-          <button
-            onClick={() => {
-              setEstado('');
-              setCategoria('');
-              // La sede de una tarjeta abierta no es un filtro que limpiar.
-              if (!ubicacion?.sede) setSede('');
-              setMotivo('');
-              setSearchTerm('');
-              setSoloCe(false);
-              setUso('');
-            }}
-            className="px-3 py-2 text-sm text-ink-muted hover:text-ink flex items-center gap-1"
-          >
-            <X className="w-4 h-4" />
-            Limpiar
-          </button>
-        )}
-      </div>
+      <FiltrosInventario
+        f={{ clase, q: searchTerm, estado, categoria, empresa, sede, uso, salas: soloCe }}
+        cambiar={(p) => {
+          if (p.clase !== undefined) setClase(p.clase);
+          if (p.q !== undefined) setSearchTerm(p.q);
+          if (p.estado !== undefined) setEstado(p.estado);
+          if (p.categoria !== undefined) setCategoria(p.categoria);
+          if (p.empresa !== undefined) setEmpresa(p.empresa);
+          if (p.sede !== undefined) setSede(p.sede);
+          if (p.uso !== undefined) setUso(p.uso);
+          if (p.salas !== undefined) setSoloCe(p.salas);
+        }}
+        limpiar={() => {
+          setEstado('');
+          setCategoria('');
+          // Lo que fija una tarjeta abierta no es un filtro que limpiar.
+          if (!ubicacion?.sede) setSede('');
+          if (!ubicacion?.empresa) setEmpresa('');
+          setMotivo('');
+          setSearchTerm('');
+          setSoloCe(false);
+          setUso('');
+        }}
+        sedes={sedes}
+        conteosClase={conteosClase}
+        conteosEmpresa={conteosEmpresa}
+        fijados={ubicacion ? { empresa: !!ubicacion.empresa, sede: !!ubicacion.sede, ambito: true } : {}}
+      />
 
       {/* --------------------------------------------------------------------
           Los tres estados. "Listo" es solo uno, y hasta esta etapa era el único

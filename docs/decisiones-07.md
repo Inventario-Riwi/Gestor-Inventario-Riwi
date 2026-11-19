@@ -472,3 +472,22 @@ equipos como portátiles y desktop, y periféricos como un nombre aparte».
 - Inventario abre en **Equipos**, con «Periféricos» y «Todo» a un clic y su
   número al lado (`conteos_clase`, con la misma regla de salas que la lista,
   D53). El desplegable de categoría solo ofrece las de la clase elegida.
+
+## D55. Filtros en un solo bloque y un dashboard que se lee de un vistazo
+
+Pedido del usuario: filtros «full, no redundantes, una experiencia amena e
+intuitiva», y un dashboard con más gráficas y datos para leer el inventario
+desde la primera página.
+
+- **Filtros** (`FiltrosInventario.tsx`): eran cinco capas sueltas (clase, chips
+  de empresa con nota, pestañas, seis controles y un botón de salas que repetía
+  la pestaña). Ahora: las pestañas arriba; debajo un solo bloque con *qué busco*
+  (equipos / periféricos / todo y el buscador), *afinar* (estado, tipo, empresa
+  con su número, sede, uso y ámbito staff/salas, del mismo tamaño) y *lo que
+  está puesto* como pastillas que se quitan solas. «Sin clasificar» sigue
+  visible sin ir a buscarlo (D28), como aviso que filtra con un clic.
+- **Dashboard**: cuatro cifras (staff, asignados, disponibles, piden atención),
+  estado del staff, por empresa, por sede, disponible para entregar por tipo,
+  las salas aparte (D53) y la actividad reciente. Todo del staff; el resumen
+  (`GET /api/equipos/resumen`) trae los desgloses nuevos y un test comprueba
+  que cada uno reparte el mismo total.

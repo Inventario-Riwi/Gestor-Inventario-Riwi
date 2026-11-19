@@ -252,6 +252,25 @@ export interface ResumenEquipos {
     por_categoria: { categoria: CategoriaEquipo; equipos: number }[];
     total: number;
   };
+  /** D55. El resto del dashboard, todo del staff. Grupos vacíos no vienen. */
+  por_empresa: { empresa: Empresa; estado: EstadoEquipo; n: number }[];
+  por_sede: { sede: string | null; asignados: number; disponibles: number; total: number }[];
+  clases: { equipo: number; periferico: number };
+  por_revisar: number;
+  disponibles_por_categoria: { categoria: CategoriaEquipo; n: number }[];
+  /** Los 8 últimos movimientos del staff, del más nuevo al más viejo. */
+  recientes: {
+    id: string;
+    tipo: string;
+    fecha: string;
+    equipo_id: string;
+    etiqueta: string | null;
+    categoria: CategoriaEquipo;
+    marca: string | null;
+    modelo: string | null;
+    quien: string | null;
+    para: string | null;
+  }[];
 }
 
 export type Movimiento = Serializado<typeof movimientos.$inferSelect>;

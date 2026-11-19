@@ -37,6 +37,7 @@ import {
   segundaSede,
   contarEmpleadosActivosSql,
   contarEquiposSql,
+  contarEquiposDeSalaSql,
   equiposPorClaseSql,
   equiposEmpresaSedeSql,
   equiposEnSedeSql,
@@ -366,6 +367,39 @@ describe('equipos: el resumen cuenta en Postgres', () => {
       despues.por_estado.find((e) => e.estado === 'Disponible')?.equipos ?? 0,
       disponiblesAntes + 1,
     );
+  });
+
+  // D55: cada desglose nuevo del dashboard reparte el MISMO total del staff.
+  // Un desglose que no suma el total contaría de más o perdería equipos, y en
+  // un gráfico eso no se nota a ojo.
+  it('empresa, sede y clase reparten el total del staff, y la actividad no trae salas', async () => {
+    const r = (await c.get('/api/equipos/resumen')).cuerpo as {
+      total: number;
+      por_empresa: { n: number }[];
+      por_sede: { total: number; asignados: number; disponibles: number }[];
+      clases: { equipo: number; periferico: number };
+      por_revisar: number;
+      disponibles_por_categoria: { n: number }[];
+      por_estado: { estado: string; equipos: number }[];
+      recientes: { equipo_id: string }[];
+    };
+    const suma = (xs: number[]) => xs.reduce((a, x) => a + x, 0);
+    assert.equal(suma(r.por_empresa.map((x) => x.n)), r.total, 'por_empresa suma el total');
+    assert.equal(suma(r.por_sede.map((x) => x.total)), r.total, 'por_sede suma el total');
+    assert.equal(r.clases.equipo + r.clases.periferico, r.total, 'las dos clases suman el total');
+    assert.equal(
+      suma(r.disponibles_por_categoria.map((x) => x.n)),
+      r.por_estado.find((e) => e.estado === 'Disponible')?.equipos ?? 0,
+      'los disponibles por tipo suman los disponibles',
+    );
+    for (const s of r.por_sede) assert.ok(s.asignados + s.disponibles <= s.total);
+    assert.ok(r.recientes.length <= 8);
+    // Contra SQL, no contra la API: ningún movimiento reciente es de una sala.
+    const ids = r.recientes.map((m) => m.equipo_id);
+    if (ids.length > 0) {
+      const deSala = await contarEquiposDeSalaSql(ids);
+      assert.equal(deSala, 0, 'la actividad reciente trajo un equipo de sala');
+    }
   });
 
   // D53: el dashboard separa staff y salas. Por los dos lados: un alta de sala

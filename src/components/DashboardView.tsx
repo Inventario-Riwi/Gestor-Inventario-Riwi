@@ -1,34 +1,37 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import type { CategoriaEquipo, EstadoEquipo, ResumenEquipos } from '../types';
-import { useSondeo } from '../lib/sondeo';
-import { api, ErrorApi } from '../lib/api';
-import { Cargando, ErrorDeCarga } from './EstadoCarga';
-import { 
-  Laptop, 
-  Wrench, 
-  Plus, 
-  PackageCheck, 
-  ArrowRight, 
-  Sparkles, 
-  CheckCircle2, 
-  Clock, 
-  MapPin,
-  TrendingUp,
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
   AlertTriangle,
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  Clock,
   GraduationCap,
+  Laptop,
+  MapPin,
+  Mouse,
+  PackageCheck,
+  Truck,
+  UserCheck,
+  Wrench,
 } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell 
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
+
+import type { EstadoEquipo, ResumenEquipos } from '../types';
+import { api, ErrorApi } from '../lib/api';
+import { etiquetaEmpresa } from '../lib/empresas';
+import { useSondeo } from '../lib/sondeo';
+import { Cargando, ErrorDeCarga } from './EstadoCarga';
 
 interface DashboardViewProps {
   onOpenNewDeviceModal: () => void;
@@ -38,27 +41,63 @@ interface DashboardViewProps {
   onAbrirDisponibles: () => void;
 }
 
-const COLORS = ['#06b6d4', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'];
-
 /**
- * Un color por estado, **de `docs/paleta.md`**.
- *
- * Están los seis del enum: si mañana entra un séptimo, cae en el color por
- * defecto y se ve gris en vez de desaparecer del gráfico, que es lo que hacía
- * la lista anterior.
+ * Un color por estado, de `docs/paleta.md`. Están los seis del enum; uno nuevo
+ * cae en el gris y se ve, en vez de desaparecer del gráfico.
  */
 const COLOR_ESTADO: Record<string, string> = {
-  Disponible: '#57C99B', // ok
-  Asignado: '#5B4FE0', // brand
-  'En mantenimiento': '#E5C84B', // warn
-  Reservado: '#DDA5F2', // info
-  Prestado: '#7C71F0', // brand-light
-  'De baja': '#9B9AB0', // ink-faint
+  Disponible: '#57C99B',
+  Asignado: '#5B4FE0',
+  'En mantenimiento': '#E5C84B',
+  Reservado: '#DDA5F2',
+  Prestado: '#7C71F0',
+  'De baja': '#9B9AB0',
 };
-const COLOR_ESTADO_POR_DEFECTO = '#9B9AB0';
+const GRIS = '#9B9AB0';
+
+/**
+ * Los colores de empresa son los de su marca (`index.css`): el mismo color en
+ * los chips de la tabla y aquí. Validados como paleta (dataviz): las tres
+ * marcas pasan; el gris de «Sin clasificar» es neutro a propósito y siempre
+ * lleva su nombre al lado.
+ */
+const COLOR_EMPRESA: Record<string, string> = {
+  RIWI: '#5B4FE0',
+  'BBL Labs': '#157A4E',
+  'Emerald Fire': '#0862C0',
+  'Sin clasificar': GRIS,
+};
+
+/** Tres tramos para las barras apiladas: lo que más se pregunta y el resto. */
+const TRAMOS = [
+  { clave: 'asignados', nombre: 'Asignados', color: COLOR_ESTADO.Asignado },
+  { clave: 'disponibles', nombre: 'Disponibles', color: COLOR_ESTADO.Disponible },
+  { clave: 'otros', nombre: 'Otros estados', color: '#D9D8E6' },
+] as const;
+
+const tooltipEstilo = {
+  contentStyle: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E3E2EE',
+    borderRadius: 10,
+    fontSize: 12,
+    color: '#1D1C4A',
+    boxShadow: '0 4px 16px rgba(29, 28, 74, 0.08)',
+  },
+  cursor: { fill: 'rgba(91, 79, 224, 0.06)' },
+};
+
+const hace = (iso: string) => {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  if (s < 60) return 'ahora';
+  if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute');
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour');
+  if (s < 86400 * 30) return rtf.format(-Math.round(s / 86400), 'day');
+  return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
-  onOpenNewDeviceModal,
   onOpenOnboardingModal,
   setActiveTab,
   onAbrirDisponibles,
@@ -85,290 +124,515 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, []);
 
   useSondeo(() => cargar({ silencioso: true }));
-
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  const datos = useMemo(() => {
+    if (!resumen) return null;
+    // Un estado sin filas no viene (GROUP BY): se lee como cero, no undefined.
+    const de = (estado: EstadoEquipo) =>
+      resumen.por_estado.find((e) => e.estado === estado)?.equipos ?? 0;
+    const sala = (estado: EstadoEquipo) =>
+      resumen.salas.por_estado.find((e) => e.estado === estado)?.equipos ?? 0;
+
+    const estados = resumen.por_estado
+      .map((e) => ({ name: e.estado, value: e.equipos, color: COLOR_ESTADO[e.estado] ?? GRIS }))
+      .filter((e) => e.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    // Por empresa: asignados, disponibles y el resto, de cada una.
+    const empresas = new Map<string, { asignados: number; disponibles: number; otros: number }>();
+    for (const f of resumen.por_empresa) {
+      const fila = empresas.get(f.empresa) ?? { asignados: 0, disponibles: 0, otros: 0 };
+      if (f.estado === 'Asignado') fila.asignados += f.n;
+      else if (f.estado === 'Disponible') fila.disponibles += f.n;
+      else fila.otros += f.n;
+      empresas.set(f.empresa, fila);
+    }
+    const porEmpresa = [...empresas.entries()]
+      .map(([empresa, v]) => ({ nombre: etiquetaEmpresa(empresa), empresa, ...v, total: v.asignados + v.disponibles + v.otros }))
+      .sort((a, b) => b.total - a.total);
+
+    const porSede = resumen.por_sede.map((s) => ({
+      nombre: s.sede ?? 'Sin sede',
+      asignados: s.asignados,
+      disponibles: s.disponibles,
+      otros: s.total - s.asignados - s.disponibles,
+      total: s.total,
+    }));
+
+    return {
+      total: resumen.total,
+      asignados: de('Asignado'),
+      disponibles: de('Disponible'),
+      mantenimiento: de('En mantenimiento'),
+      prestados: de('Prestado'),
+      reservados: de('Reservado'),
+      deBaja: de('De baja'),
+      estados,
+      porEmpresa,
+      porSede,
+      disponiblesTipo: resumen.disponibles_por_categoria,
+      sala: {
+        total: resumen.salas.total,
+        disponibles: sala('Disponible'),
+        mantenimiento: sala('En mantenimiento'),
+        deBaja: sala('De baja'),
+        categorias: [...resumen.salas.por_categoria].sort((a, b) => b.equipos - a.equipos),
+      },
+    };
+  }, [resumen]);
 
   if (cargando) return <Cargando que="el resumen del inventario" />;
   if (error) {
     return <ErrorDeCarga error={error} que="el resumen del inventario" onReintentar={() => void cargar()} />;
   }
-  if (!resumen) return null;
+  if (!resumen || !datos) return null;
 
-  /**
-   * Un estado sin ninguna fila **no viene** en la respuesta: `GROUP BY` no
-   * devuelve grupos vacíos. Hoy es el caso de 'En mantenimiento', a cero.
-   * Leerlo con un `.find()?.equipos` a secas daría `undefined`, que en la
-   * barra de progreso sale como `NaN%` y en el texto como «undefined equipos».
-   */
-  const conteoDe = (estado: EstadoEquipo) =>
-    resumen.por_estado.find((e) => e.estado === estado)?.equipos ?? 0;
-
-  // TODO(6): sustituir estas cuentas por los 7 widgets de D3.
-  const totalCount = resumen.total;
-  const inUseCount = conteoDe('Asignado');
-  const disponiblesCount = conteoDe('Disponible');
-  const inMaintenanceCount = conteoDe('En mantenimiento');
-  const pendingReturnCount = conteoDe('Reservado');
-
-  // D13: no es un estado, es un traslado sin confirmar. Por eso NO entra en el
-  // desglose de estados de abajo: un equipo que viaja ya está contado como
-  // Asignado o Disponible, y sumarlo otra vez haría que las barras pasaran
-  // del total.
-  const inTransitCount = resumen.traslados_abiertos;
-
-  // D53. Las salas de entrenamiento, aparte: los números de arriba son solo
-  // del staff, y estos no se suman a ellos en ningún sitio.
-  const salas = resumen.salas;
-  const salaDe = (estado: EstadoEquipo) =>
-    salas.por_estado.find((e) => e.estado === estado)?.equipos ?? 0;
-
-  const categoryChartData = resumen.por_categoria.map((c: { categoria: CategoriaEquipo; equipos: number }) => ({
-    name: c.categoria,
-    value: c.equipos,
-  }));
-
-  /**
-   * El desglose sale del ENUM y de lo que devuelve la API, no de una lista
-   * escrita a mano.
-   *
-   * ==========================================================================
-   * LA LISTA A MANO SE DEJABA 24 EQUIPOS FUERA.
-   * ==========================================================================
-   *
-   * Nombraba cuatro estados —«En Uso», «Disponible Hub», «Mantenimiento» y
-   * «Reservado»— y el enum tiene SEIS. Los 15 equipos `De baja` y los 9
-   * `Prestado` no aparecían en ninguna barra, y como las barras se dibujan
-   * como porcentaje sobre el total, el gráfico ni siquiera llegaba al 100 %
-   * sin que nada lo delatara.
-   *
-   * Además dos de esos nombres no eran del enum: «En Uso» es `Asignado` y
-   * «Disponible Hub» es `Disponible` —lo de «hub» venía del SaaS del que salió
-   * el prototipo—. Un estado que en pantalla se llama distinto que en la base
-   * obliga a traducir de memoria cada vez que alguien compara las dos.
-   *
-   * Recorriendo `por_estado`, un estado nuevo en el enum aparece solo.
-   */
-  const statusChartData = resumen.por_estado
-    .map((e: { estado: EstadoEquipo; equipos: number }) => ({
-      name: e.estado,
-      value: e.equipos,
-      color: COLOR_ESTADO[e.estado] ?? COLOR_ESTADO_POR_DEFECTO,
-    }))
-    // Los estados a cero se filtran: una barra de longitud cero con su etiqueta
-    // ocupa sitio para decir nada. El total de arriba ya los incluye.
-    //
-    // 'En Tránsito' NO entra: ya no es un estado (D13), y un equipo que viaja
-    // sigue contado en el suyo. Sumarlo haría que las barras pasaran del total.
-    .filter((item) => item.value > 0)
-    .sort((a, b) => b.value - a.value);
+  const pct = (n: number) => (datos.total ? Math.round((n / datos.total) * 100) : 0);
+  const atencion = datos.mantenimiento + resumen.por_revisar + resumen.traslados_abiertos;
 
   return (
-    <div className="space-y-6">
-      
-      {/* Top Banner / Welcome Callout */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 text-slate-900 shadow-sm relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full border border-blue-200 mb-2 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>Inventario de TI de RIWI y BBL Labs</span>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Gestión de inventario de TI
-            </h1>
-            {/* La frase llevaba pegado un comentario de trabajo entre
-                paréntesis —«El texto anterior hablaba de licencias MDM…»— que
-                se veía EN PANTALLA. Y enumeraba cinco sedes cuando son seis.
-                Ahora el reparto lo cuenta el propio gráfico de abajo. */}
-            <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              {totalCount} equipos del staff y {salas.total} en salas de entrenamiento, contados por
-              separado.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={onAbrirDisponibles}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-2"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Disponibles</span>
-              <span className="bg-white/20 rounded px-1.5 tabular-nums">{disponiblesCount}</span>
-            </button>
-            <button
-              onClick={onOpenOnboardingModal}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-2"
-            >
-              <PackageCheck className="w-4 h-4" />
-              <span>Entregar equipos</span>
-            </button>
-          </div>
+    <div className="space-y-5 pb-8">
+      {/* Cabecera: qué es y las dos acciones que más se usan. */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-ink tracking-tight">Panel de inventario</h1>
+          <p className="text-sm text-ink-muted mt-1">
+            Equipos del staff de RIWI, Blackbird Labs y Emerald Fire. Las salas de entrenamiento van
+            aparte, abajo.
+          </p>
         </div>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={onAbrirDisponibles}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#146B3A] hover:bg-[#0F5A30] active:scale-[0.97] transition-[background-color,transform] duration-150 flex items-center gap-2 shadow-sm"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Ver disponibles
+            <span className="bg-white/20 rounded px-1.5 tabular-nums">{datos.disponibles}</span>
+          </button>
+          <button
+            onClick={onOpenOnboardingModal}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-brand hover:bg-brand-hover active:scale-[0.97] transition-[background-color,transform] duration-150 flex items-center gap-2 shadow-sm"
+          >
+            <PackageCheck className="w-4 h-4" />
+            Entregar equipos
+          </button>
+        </div>
+      </header>
 
-      {/* KPI Cards Row */}
-      {/* Una sola tarjeta desde que se retiraron las de valor, envíos y
-          cumplimiento: sin datos que las llenaran, eran tres recuadros diciendo
-          que faltaba algo. Con `lg:grid-cols-4` esta quedaba encogida en un
-          cuarto de ancho con tres huecos al lado, que es peor que el hueco que
-          se quitó. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Staff: asignados frente a disponibles. El botón lleva a la lista de
-            lo disponible, que es lo que se viene a buscar. */}
-        <button
-          onClick={onAbrirDisponibles}
-          className="text-left bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition-all hover:shadow-md hover:border-emerald-300"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Staff</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Laptop className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-slate-900">
-              {inUseCount} <span className="text-xs font-normal text-slate-500">Asignados</span>
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-600 font-medium">
-              <span className="text-emerald-700 font-semibold">{disponiblesCount} disponibles</span> sin
-              asignar · ver lista
-              <ArrowRight className="w-3 h-3" />
-            </div>
-          </div>
-        </button>
-
-        {/* D53. Salas de entrenamiento: apartado propio, nunca sumado al staff. */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Salas de entrenamiento
+      {/* Cuatro cifras que contestan lo primero: cuánto hay, cuánto está en
+          uso, cuánto se puede entregar y cuánto pide atención. */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <Kpi
+          titulo="Staff en inventario"
+          valor={datos.total}
+          icono={Laptop}
+          detalle={
+            <span className="flex flex-wrap gap-x-3">
+              <span className="flex items-center gap-1">
+                <Laptop className="w-3.5 h-3.5" /> {resumen.clases.equipo} equipos
+              </span>
+              <span className="flex items-center gap-1">
+                <Mouse className="w-3.5 h-3.5" /> {resumen.clases.periferico} periféricos
+              </span>
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <GraduationCap className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-slate-900">
-              {salas.total} <span className="text-xs font-normal text-slate-500">equipos en salas</span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-slate-600 font-medium">
-              <span>{salaDe('Disponible')} disponibles</span>
-              {salaDe('En mantenimiento') > 0 && <span>{salaDe('En mantenimiento')} en mantenimiento</span>}
-              {salaDe('De baja') > 0 && <span>{salaDe('De baja')} de baja</span>}
-            </div>
-          </div>
-        </div>
+          }
+          onClick={() => setActiveTab('inventory')}
+        />
+        <Kpi
+          titulo="Asignados"
+          valor={datos.asignados}
+          icono={UserCheck}
+          detalle={`${pct(datos.asignados)} % del staff está en manos de alguien`}
+          barra={{ pct: pct(datos.asignados), color: COLOR_ESTADO.Asignado }}
+          onClick={() => setActiveTab('inventory')}
+        />
+        <Kpi
+          titulo="Disponibles"
+          valor={datos.disponibles}
+          icono={CheckCircle2}
+          detalle="Listos para entregar · ver lista"
+          barra={{ pct: pct(datos.disponibles), color: COLOR_ESTADO.Disponible }}
+          onClick={onAbrirDisponibles}
+          destacado
+        />
+        <Kpi
+          titulo="Piden atención"
+          valor={atencion}
+          icono={AlertTriangle}
+          detalle={
+            <span className="flex flex-wrap gap-x-3">
+              <span className="flex items-center gap-1">
+                <Wrench className="w-3.5 h-3.5" /> {datos.mantenimiento} en taller
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" /> {resumen.por_revisar} por revisar
+              </span>
+              <span className="flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5" /> {resumen.traslados_abiertos} en tránsito
+              </span>
+            </span>
+          }
+          onClick={() => setActiveTab('inventory')}
+        />
+      </section>
 
-      </div>
-
-      {/* Main Grid: Charts & Logistics Feed */}
-      {/* Una columna, no tres.
-
-          La derecha llevaba «Actividad de Envíos» y «Ocupación por sede», y las
-          dos se retiraron: los traslados en curso ya se ven en Sedes, y la
-          ocupación necesita una capacidad que ninguna sede tiene declarada.
-          Dejar la rejilla de tres con la columna vacía encogería los dos
-          gráficos que sí tienen datos a dos tercios del ancho, por hacer sitio
-          a nada. */}
-      <div className="grid grid-cols-1 gap-6">
-        
-        {/* Left Column: Recharts Visualization (Spans 2 cols) */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Antes: inversión en hardware por departamento, en USD.
-              Perdió las dos mitades a la vez — `costo` está vacío en las 186
-              filas y `department` pasó a `empleados.area` (D3). */}
-
-          {/* Chart 2: Category & Status Breakdown (Side by Side inside left col) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Pie Chart: Equipment by Category */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-1">Staff por categoría</h3>
-              <p className="text-xs text-slate-500 mb-4">Los {totalCount} equipos del staff, sin salas de entrenamiento</p>
-
-              <div className="h-48 w-full flex items-center justify-center">
+      {/* Estado y empresa: el reparto del staff de un vistazo. */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+        <Tarjeta titulo="Estado del staff" subtitulo={`${datos.total} equipos y periféricos`} className="lg:col-span-2">
+          {datos.estados.length === 0 ? (
+            <SinDatos />
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="relative w-40 h-40 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={categoryChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={4}
+                      data={datos.estados}
                       dataKey="value"
+                      nameKey="name"
+                      innerRadius={52}
+                      outerRadius={74}
+                      paddingAngle={2}
+                      stroke="#FFFFFF"
+                      strokeWidth={2}
                     >
-                      {categoryChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={['#2563eb', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'][index % 6]} />
+                      {datos.estados.map((e) => (
+                        <Cell key={e.name} fill={e.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '8px', color: '#0f172a' }}
-                    />
+                    <Tooltip {...tooltipEstilo} />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
-                {categoryChartData.map((item, idx) => (
-                  <div key={item.name} className="flex items-center gap-2 text-xs">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'][idx % 6] }} />
-                    <span className="text-slate-600 truncate">{item.name}:</span>
-                    <span className="font-bold text-slate-900">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Status Breakdown List */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 mb-1">Estado del staff</h3>
-                <p className="text-xs text-slate-500 mb-4">Visibilidad en tiempo real del ciclo de vida</p>
-
-                <div className="space-y-3">
-                  {statusChartData.map((st) => (
-                    <div key={st.name} className="space-y-1">
-                      <div className="flex justify-between text-xs font-medium">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: st.color }} />
-                          {st.name}
-                        </span>
-                        <span className="text-slate-900 font-bold">{st.value} equipos</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full rounded-full" 
-                          style={{ 
-                            width: `${Math.round((st.value / (totalCount || 1)) * 100)}%`,
-                            backgroundColor: st.color 
-                          }} 
-                        />
-                      </div>
-                    </div>
-                  ))}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold text-ink tabular-nums">{datos.total}</span>
+                  <span className="text-[11px] text-ink-muted">total</span>
                 </div>
               </div>
-
-              <button
-                onClick={() => setActiveTab('inventory')}
-                className="mt-4 w-full py-2 bg-slate-50 hover:bg-slate-100 text-blue-600 text-xs font-semibold rounded-lg border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span>Ver Tabla Completa de Inventario</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <ul className="flex-1 space-y-2 min-w-0">
+                {datos.estados.map((e) => (
+                  <li key={e.name} className="text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-ink truncate">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
+                        {e.name}
+                      </span>
+                      <span className="tabular-nums text-ink font-semibold">
+                        {e.value}
+                        <span className="text-ink-muted font-normal text-xs ml-1">{pct(e.value)} %</span>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
+          )}
+        </Tarjeta>
 
+        <Tarjeta titulo="Por empresa" subtitulo="Asignados, disponibles y el resto de cada una" className="lg:col-span-3" icono={Building2}>
+          {datos.porEmpresa.length === 0 ? (
+            <SinDatos />
+          ) : (
+            <>
+              <Leyenda />
+              <div style={{ height: Math.max(140, datos.porEmpresa.length * 46) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datos.porEmpresa} layout="vertical" margin={{ left: 8, right: 40 }} barCategoryGap={10}>
+                    <CartesianGrid horizontal={false} stroke="#EEEDF5" />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: '#6E6E8B' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis
+                      type="category"
+                      dataKey="nombre"
+                      width={110}
+                      tick={{ fontSize: 12, fill: '#1D1C4A' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip {...tooltipEstilo} />
+                    {TRAMOS.map((t, i) => (
+                      <Bar
+                        key={t.clave}
+                        dataKey={t.clave}
+                        name={t.nombre}
+                        stackId="e"
+                        fill={t.color}
+                        stroke="#FFFFFF"
+                        strokeWidth={1}
+                        radius={i === TRAMOS.length - 1 ? [0, 4, 4, 0] : 0}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {datos.porEmpresa.map((e) => (
+                  <li
+                    key={e.empresa}
+                    className="text-xs px-2 py-1 rounded-md bg-surface-alt text-ink-muted flex items-center gap-1.5"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_EMPRESA[e.empresa] ?? GRIS }} />
+                    {e.nombre} <strong className="text-ink tabular-nums">{e.total}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Tarjeta>
+      </section>
+
+      {/* Dónde está y qué se puede entregar. */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Tarjeta titulo="Por sede" subtitulo="Cuántos hay en cada sede y cuántos están libres" icono={MapPin}>
+          {datos.porSede.length === 0 ? (
+            <SinDatos />
+          ) : (
+            <>
+              <Leyenda />
+              <div style={{ height: Math.max(160, datos.porSede.length * 40) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datos.porSede} layout="vertical" margin={{ left: 8, right: 16 }} barCategoryGap={8}>
+                    <CartesianGrid horizontal={false} stroke="#EEEDF5" />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: '#6E6E8B' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis type="category" dataKey="nombre" width={110} tick={{ fontSize: 12, fill: '#1D1C4A' }} axisLine={false} tickLine={false} />
+                    <Tooltip {...tooltipEstilo} />
+                    {TRAMOS.map((t, i) => (
+                      <Bar
+                        key={t.clave}
+                        dataKey={t.clave}
+                        name={t.nombre}
+                        stackId="s"
+                        fill={t.color}
+                        stroke="#FFFFFF"
+                        strokeWidth={1}
+                        radius={i === TRAMOS.length - 1 ? [0, 4, 4, 0] : 0}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+        </Tarjeta>
+
+        <Tarjeta
+          titulo="Disponible para entregar"
+          subtitulo="Por tipo, del staff"
+          icono={PackageCheck}
+          accion={{ texto: 'Ver la lista', onClick: onAbrirDisponibles }}
+        >
+          {datos.disponiblesTipo.length === 0 ? (
+            <SinDatos texto="No hay nada disponible ahora mismo." />
+          ) : (
+            <div style={{ height: Math.max(160, datos.disponiblesTipo.length * 36) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={datos.disponiblesTipo} layout="vertical" margin={{ left: 8, right: 36 }} barCategoryGap={8}>
+                  <XAxis type="number" hide allowDecimals={false} />
+                  <YAxis type="category" dataKey="categoria" width={90} tick={{ fontSize: 12, fill: '#1D1C4A' }} axisLine={false} tickLine={false} />
+                  <Tooltip {...tooltipEstilo} />
+                  <Bar
+                    dataKey="n"
+                    name="Disponibles"
+                    fill={COLOR_ESTADO.Disponible}
+                    radius={[0, 4, 4, 0]}
+                    label={{ position: 'right', fontSize: 12, fill: '#1D1C4A', fontWeight: 600 }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Tarjeta>
+      </section>
+
+      {/* Salas de entrenamiento, aparte (D53), y lo último que pasó. */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+        <Tarjeta
+          titulo="Salas de entrenamiento"
+          subtitulo="Aparte del staff: no se suman a nada de arriba"
+          icono={GraduationCap}
+          className="lg:col-span-2"
+          accion={{ texto: 'Ir a salas', onClick: () => setActiveTab('inventory') }}
+        >
+          <div className="flex items-end gap-6">
+            <div>
+              <p className="text-3xl font-bold text-ink tabular-nums">{datos.sala.total}</p>
+              <p className="text-xs text-ink-muted">equipos en salas</p>
+            </div>
+            <dl className="grid grid-cols-3 gap-4 text-sm flex-1">
+              <Mini etiqueta="Disponibles" valor={datos.sala.disponibles} color={COLOR_ESTADO.Disponible} />
+              <Mini etiqueta="En taller" valor={datos.sala.mantenimiento} color={COLOR_ESTADO['En mantenimiento']} />
+              <Mini etiqueta="De baja" valor={datos.sala.deBaja} color={GRIS} />
+            </dl>
           </div>
+          {datos.sala.categorias.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-line flex flex-wrap gap-1.5">
+              {datos.sala.categorias.map((c) => (
+                <span key={c.categoria} className="text-[11px] px-2 py-0.5 rounded-full bg-surface-alt text-ink-muted">
+                  {c.categoria} <strong className="text-ink tabular-nums">{c.equipos}</strong>
+                </span>
+              ))}
+            </div>
+          )}
+        </Tarjeta>
 
-        </div>
+        <Tarjeta
+          titulo="Actividad reciente"
+          subtitulo="Los últimos movimientos del staff"
+          icono={Clock}
+          className="lg:col-span-3"
+          accion={{ texto: 'Ver inventario', onClick: () => setActiveTab('inventory') }}
+        >
+          {resumen.recientes.length === 0 ? (
+            <SinDatos texto="Todavía no hay movimientos." />
+          ) : (
+            <ul className="divide-y divide-line -my-1">
+              {resumen.recientes.map((m) => (
+                <li key={m.id} className="py-2 flex items-start gap-3">
+                  <span className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorMovimiento(m.tipo) }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ink truncate">
+                      <span className="font-semibold">{m.tipo}</span>
+                      {' · '}
+                      <span className="font-mono text-xs text-brand">{m.etiqueta ?? '—'}</span>{' '}
+                      <span className="text-ink-muted">
+                        {[m.categoria, m.marca, m.modelo].filter(Boolean).join(' ')}
+                      </span>
+                    </p>
+                    <p className="text-xs text-ink-muted truncate">
+                      {m.para ? `Para ${m.para} · ` : ''}
+                      {m.quien ? `Registró ${m.quien}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-xs text-ink-muted whitespace-nowrap tabular-nums">{hace(m.fecha)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+      </section>
 
-      </div>
-
+      {/* Una lectura en frase de lo que no tiene gráfico propio. */}
+      {(datos.prestados > 0 || datos.reservados > 0 || datos.deBaja > 0) && (
+        <p className="text-xs text-ink-muted">
+          Además:{' '}
+          {[
+            datos.prestados > 0 && `${datos.prestados} prestados a otra empresa`,
+            datos.reservados > 0 && `${datos.reservados} reservados`,
+            datos.deBaja > 0 && `${datos.deBaja} dados de baja (se recuperan desde su ficha)`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          .
+        </p>
+      )}
     </div>
   );
 };
+
+const colorMovimiento = (tipo: string) =>
+  tipo === 'Asignación'
+    ? COLOR_ESTADO.Asignado
+    : tipo === 'Devolución' || tipo === 'Reversión de baja' || tipo === 'Retorno de mantenimiento'
+      ? COLOR_ESTADO.Disponible
+      : tipo === 'Baja'
+        ? '#F4593F'
+        : tipo.startsWith('Envío')
+          ? COLOR_ESTADO['En mantenimiento']
+          : GRIS;
+
+// ---------------------------------------------------------------------------
+// Piezas
+// ---------------------------------------------------------------------------
+
+const Kpi: React.FC<{
+  titulo: string;
+  valor: number;
+  icono: React.ComponentType<{ className?: string }>;
+  detalle: React.ReactNode;
+  barra?: { pct: number; color: string };
+  onClick?: () => void;
+  destacado?: boolean;
+}> = ({ titulo, valor, icono: Icono, detalle, barra, onClick, destacado }) => (
+  <button
+    onClick={onClick}
+    className={`text-left bg-surface border rounded-xl p-4 shadow-sm transition-[box-shadow,border-color,transform] duration-200 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 ${
+      destacado ? 'border-[#146B3A]/40' : 'border-line hover:border-brand/40'
+    }`}
+  >
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{titulo}</span>
+      <span
+        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+          destacado ? 'bg-[#146B3A]/10 text-[#146B3A]' : 'bg-brand-subtle text-brand'
+        }`}
+      >
+        <Icono className="w-4 h-4" />
+      </span>
+    </div>
+    <p className="mt-2 text-3xl font-bold text-ink tabular-nums">{valor}</p>
+    {barra && (
+      <div className="mt-2 h-1.5 rounded-full bg-surface-alt overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${barra.pct}%`, backgroundColor: barra.color }} />
+      </div>
+    )}
+    <div className="mt-2 text-xs text-ink-muted">{detalle}</div>
+  </button>
+);
+
+const Tarjeta: React.FC<{
+  titulo: string;
+  subtitulo?: string;
+  icono?: React.ComponentType<{ className?: string }>;
+  className?: string;
+  accion?: { texto: string; onClick: () => void };
+  children: React.ReactNode;
+}> = ({ titulo, subtitulo, icono: Icono, className = '', accion, children }) => (
+  <div className={`bg-surface border border-line rounded-xl p-5 shadow-sm ${className}`}>
+    <div className="flex items-start justify-between gap-3 mb-4">
+      <div>
+        <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+          {Icono && <Icono className="w-4 h-4 text-brand" />}
+          {titulo}
+        </h2>
+        {subtitulo && <p className="text-xs text-ink-muted mt-0.5">{subtitulo}</p>}
+      </div>
+      {accion && (
+        <button
+          onClick={accion.onClick}
+          className="text-xs font-semibold text-brand hover:text-brand-hover flex items-center gap-1 whitespace-nowrap"
+        >
+          {accion.texto}
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+const Leyenda: React.FC = () => (
+  <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-2 text-xs text-ink-muted">
+    {TRAMOS.map((t) => (
+      <li key={t.clave} className="flex items-center gap-1.5">
+        <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: t.color }} />
+        {t.nombre}
+      </li>
+    ))}
+  </ul>
+);
+
+const Mini: React.FC<{ etiqueta: string; valor: number; color: string }> = ({ etiqueta, valor, color }) => (
+  <div>
+    <dt className="text-xs text-ink-muted flex items-center gap-1.5">
+      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+      {etiqueta}
+    </dt>
+    <dd className="text-lg font-semibold text-ink tabular-nums">{valor}</dd>
+  </div>
+);
+
+const SinDatos: React.FC<{ texto?: string }> = ({ texto = 'Sin datos todavía.' }) => (
+  <p className="text-sm text-ink-muted py-8 text-center">{texto}</p>
+);

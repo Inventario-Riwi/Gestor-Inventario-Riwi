@@ -964,6 +964,16 @@ export async function equiposEnSedeSql(sedeId: string): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/** De estos ids, cuántos son equipos de sala, contado en SQL (D55). */
+export async function contarEquiposDeSalaSql(ids: string[]): Promise<number> {
+  const r = await db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM equipos
+         WHERE equipos.centro_entrenamiento
+           AND equipos.id = ANY(${`{${ids.join(',')}}`}::uuid[])`,
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 /** Todos los equipos de la tabla, staff y salas, contado en SQL (D53). */
 export async function contarEquiposSql(): Promise<number> {
   const r = await db.execute<{ n: string }>(sql`SELECT count(*)::text AS n FROM equipos`);

@@ -800,6 +800,57 @@ export async function resumen(bd: BD = db) {
       .orderBy(asc(equipos.categoria)),
   ]);
 
+  // El resto del dashboard (D55), todo del staff como lo de arriba. SQL crudo
+  // con cada tabla calificada a mano: hay JOIN y subconsultas (CLAUDE.md).
+  const [porEmpresa, porSede, clases, porRevisar, disponibles, recientes] = await Promise.all([
+    bd.execute<{ empresa: string; estado: string; n: number }>(sql`
+      SELECT equipos.empresa::text AS empresa, equipos.estado::text AS estado, count(*)::int AS n
+        FROM equipos WHERE NOT equipos.centro_entrenamiento
+       GROUP BY equipos.empresa, equipos.estado`),
+    bd.execute<{ sede: string | null; asignados: number; disponibles: number; total: number }>(sql`
+      SELECT sedes.nombre AS sede,
+             count(*) FILTER (WHERE equipos.estado::text = 'Asignado')::int AS asignados,
+             count(*) FILTER (WHERE equipos.estado::text = 'Disponible')::int AS disponibles,
+             count(*)::int AS total
+        FROM equipos LEFT JOIN sedes ON sedes.id = equipos.sede_id
+       WHERE NOT equipos.centro_entrenamiento
+       GROUP BY sedes.nombre
+       ORDER BY count(*) DESC`),
+    conteoPorClase(false, bd),
+    bd.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM equipos
+       WHERE NOT equipos.centro_entrenamiento AND equipos.requiere_revision`),
+    bd.execute<{ categoria: string; n: number }>(sql`
+      SELECT equipos.categoria::text AS categoria, count(*)::int AS n
+        FROM equipos
+       WHERE NOT equipos.centro_entrenamiento AND equipos.estado::text = 'Disponible'
+       GROUP BY equipos.categoria
+       ORDER BY count(*) DESC`),
+    bd.execute<{
+      id: string;
+      tipo: string;
+      fecha: string;
+      equipo_id: string;
+      etiqueta: string | null;
+      categoria: string;
+      marca: string | null;
+      modelo: string | null;
+      quien: string | null;
+      para: string | null;
+    }>(sql`
+      SELECT movimientos.id, movimientos.tipo::text AS tipo, movimientos.fecha,
+             equipos.id AS equipo_id, equipos.etiqueta, equipos.categoria::text AS categoria,
+             equipos.marca, equipos.modelo,
+             usuarios_app.nombre AS quien, empleados.nombre AS para
+        FROM movimientos
+        JOIN equipos ON equipos.id = movimientos.equipo_id
+        LEFT JOIN usuarios_app ON usuarios_app.id = movimientos.usuario_app_id
+        LEFT JOIN empleados ON empleados.id = movimientos.empleado_destino_id
+       WHERE NOT equipos.centro_entrenamiento
+       ORDER BY movimientos.fecha DESC, movimientos.created_at DESC
+       LIMIT 8`),
+  ]);
+
   return {
     por_estado: porEstado,
     por_categoria: porCategoria,
@@ -810,6 +861,17 @@ export async function resumen(bd: BD = db) {
       por_categoria: salasCategoria,
       total: salasEstado.reduce((a, e) => a + Number(e.equipos), 0),
     },
+    por_empresa: porEmpresa.rows.map((f) => ({ ...f, n: Number(f.n) })),
+    por_sede: porSede.rows.map((f) => ({
+      sede: f.sede,
+      asignados: Number(f.asignados),
+      disponibles: Number(f.disponibles),
+      total: Number(f.total),
+    })),
+    clases,
+    por_revisar: Number(porRevisar.rows[0]?.n ?? 0),
+    disponibles_por_categoria: disponibles.rows.map((f) => ({ categoria: f.categoria, n: Number(f.n) })),
+    recientes: recientes.rows,
   };
 }
 
