@@ -30,6 +30,7 @@ import type {
   ModoActa,
   MovimientoConNombres,
   NuevoEquipo,
+  Operacion,
   Pagina,
   PuestoSala,
   ResumenSala,
@@ -409,10 +410,8 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ prestado_a }) },
     ),
 
-  operacionSimple: (
-    equipoId: string,
-    operacion: 'reservar' | 'liberar' | 'baja' | 'recuperar_prestamo',
-  ) =>
+  /** Cualquier operación directa que no pide datos (`requiere: null` en la tabla). */
+  operacionSimple: (equipoId: string, operacion: Operacion) =>
     pedir<{ equipo: EquipoConMotivos; movimiento: Movimiento }>(
       `/api/equipos/${equipoId}/${operacion}`,
       { method: 'POST', body: '{}' },

@@ -165,16 +165,15 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
         });
       else if (op === 'prestar') r = await api.prestar(equipo.id, prestadoA as Prestatario);
       else if (op === 'reasignar') r = await api.reasignar(equipo.id, empleadoId);
-      else if (
-        op === 'reservar' ||
-        op === 'liberar' ||
-        op === 'baja' ||
-        op === 'recuperar_prestamo'
-      )
+      // Las que no piden ningún dato salen de la TABLA (`requiere: null`), no
+      // de una lista escrita aquí. Esa lista existía, y «Recuperar de baja»
+      // nació con botón y endpoint pero fuera de ella: el botón fallaba en el
+      // navegador sin llegar al servidor (CLAUDE.md, la copia que se separa).
+      else if (de(op).requiere === null && de(op).disparo === 'directa')
         r = await api.operacionSimple(equipo.id, op);
-      // No hay `else`. Una operación con `disparo: 'parte'` no llega hasta
-      // aquí —no se le pinta botón— y si algún día llegara, es mejor que el
-      // compilador lo diga que inventarle un endpoint que no existe.
+      // Una operación con `disparo: 'parte'` no llega hasta aquí —no se le
+      // pinta botón— y si algún día llegara, mejor decirlo que inventarle un
+      // endpoint que no existe.
       else throw new Error(`La operación «${op}» no se dispara desde aquí.`);
 
       setAbierta(null);
@@ -190,7 +189,13 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       // El 409 del servidor ya trae el porqué y la salida ("puedes"). Se
       // enseña tal cual: reescribirlo aquí sería inventar una explicación
       // distinta de la que decide la regla.
-      setError(e instanceof ErrorApi ? e.message : 'No se pudo completar la operación.');
+      // Lo que no viene del servidor también dice qué pasó: un genérico aquí
+      // fue lo que escondió que el botón ni siquiera llegaba a la API.
+      setError(
+        e instanceof ErrorApi
+          ? e.message
+          : `No se pudo completar la operación${e instanceof Error ? `: ${e.message}` : '.'}`,
+      );
     } finally {
       setEnviando(false);
     }
@@ -254,10 +259,13 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
                 onClick={() => void pulsar(op)}
                 disabled={enviando}
                 title={t.explicacion}
-                className={`px-3 py-1.5 text-sm rounded-lg border font-medium disabled:opacity-50 ${
-                  t.irreversible
-                    ? 'border-danger/50 text-danger hover:bg-danger/10'
-                    : 'border-line text-ink hover:bg-surface-alt'
+                className={`px-3 py-1.5 text-sm rounded-lg border font-medium disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97] ${
+                  op === 'revertir_baja'
+                    ? // Verde navidad: es la salida de «De baja» y se busca de un vistazo.
+                      'bg-[#146B3A] border-[#146B3A] text-white hover:bg-[#0F5A30]'
+                    : t.irreversible
+                      ? 'border-danger/50 text-danger hover:bg-danger/10'
+                      : 'border-line text-ink hover:bg-surface-alt'
                 } ${abierta === op ? 'ring-2 ring-brand/40' : ''}`}
               >
                 {t.etiqueta}
