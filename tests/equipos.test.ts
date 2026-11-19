@@ -36,6 +36,7 @@ import {
   puestosEnSalaSql,
   segundaSede,
   contarEmpleadosActivosSql,
+  contarEquiposSql,
   equiposEmpresaSedeSql,
   equiposEnSedeSql,
   borrarSedes,
@@ -364,6 +365,34 @@ describe('equipos: el resumen cuenta en Postgres', () => {
       despues.por_estado.find((e) => e.estado === 'Disponible')?.equipos ?? 0,
       disponiblesAntes + 1,
     );
+  });
+
+  // D53: el dashboard separa staff y salas. Por los dos lados: un alta de sala
+  // mueve `salas` y no el staff; staff + salas da la tabla entera, contada en SQL.
+  it('un equipo de sala cuenta en «salas» y no en el staff, y las dos partes dan el total', async () => {
+    type R = { total: number; salas: { total: number; por_estado: { estado: string; equipos: number }[] } };
+    const antes = (await c.get('/api/equipos/resumen')).cuerpo as R;
+
+    const r = await c.post('/api/equipos', {
+      categoria: 'Teclado',
+      etiqueta: `${suite.prefijo}RESSALA`,
+      serial: `SN-${suite.prefijo}RESSALA`,
+      estado: 'Disponible',
+      centro_entrenamiento: true,
+      ubicacion_detalle: `${suite.prefijo} Sala resumen`,
+    });
+    assert.equal(r.estado, 201, JSON.stringify(r.cuerpo));
+    creados.push((r.cuerpo as { equipo: { id: string } }).equipo.id);
+
+    const despues = (await c.get('/api/equipos/resumen')).cuerpo as R;
+    assert.equal(despues.total, antes.total, 'el staff no se movió');
+    assert.equal(despues.salas.total, antes.salas.total + 1, 'las salas sí');
+    assert.equal(
+      despues.salas.por_estado.reduce((a, e) => a + e.equipos, 0),
+      despues.salas.total,
+      'salas.por_estado suma salas.total',
+    );
+    assert.equal(despues.total + despues.salas.total, await contarEquiposSql(), 'staff + salas = la tabla entera');
   });
 });
 
@@ -1196,10 +1225,23 @@ describe('CE: el conjunto del puesto, el filtro y la búsqueda por sala', () => 
   });
 
   it('buscar por el nombre de la sala encuentra el puesto', async () => {
-    const r = await c.get(`/api/equipos?q=${encodeURIComponent(sala)}`);
+    // Entre los de sala (ce=true): las salas van aparte del staff (D53).
+    const r = await c.get(`/api/equipos?ce=true&q=${encodeURIComponent(sala)}`);
     const ids = (r.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id);
     assert.ok(ids.includes(torre) && ids.includes(pantalla), 'no encontró el puesto por su sala');
     assert.ok(!ids.includes(suelto), 'trajo un equipo de otra sala');
+  });
+
+  // D53, escrito desde el pedido: «los equipos de salas de entrenamiento deben
+  // ir aparte, no se deben mezclar en ninguna zona del inventario».
+  it('la lista general (sin ce) es del staff: no trae equipos de sala', async () => {
+    const r = await c.get(`/api/equipos?q=${encodeURIComponent(sala)}`);
+    const ids = (r.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id);
+    assert.ok(!ids.includes(torre) && !ids.includes(pantalla), 'la lista del staff trajo un puesto de sala');
+    // Y `todos` sí los trae, para quien elige entre cualquier equipo.
+    const t = await c.get(`/api/equipos?ce=todos&q=${encodeURIComponent(sala)}`);
+    const todos = (t.cuerpo as { filas: { id: string }[] }).filas.map((f) => f.id);
+    assert.ok(todos.includes(torre), 'ce=todos debía traer también los de sala');
   });
 });
 

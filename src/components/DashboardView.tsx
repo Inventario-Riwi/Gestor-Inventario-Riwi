@@ -14,7 +14,8 @@ import {
   Clock, 
   MapPin,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  GraduationCap,
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -33,6 +34,8 @@ interface DashboardViewProps {
   onOpenNewDeviceModal: () => void;
   onOpenOnboardingModal: () => void;
   setActiveTab: (tab: string) => void;
+  /** D53. Lo disponible del staff, con solo sede y empresa para filtrar. */
+  onAbrirDisponibles: () => void;
 }
 
 const COLORS = ['#06b6d4', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'];
@@ -58,6 +61,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewDeviceModal,
   onOpenOnboardingModal,
   setActiveTab,
+  onAbrirDisponibles,
 }) => {
   const [resumen, setResumen] = useState<ResumenEquipos | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -113,6 +117,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Asignado o Disponible, y sumarlo otra vez haría que las barras pasaran
   // del total.
   const inTransitCount = resumen.traslados_abiertos;
+
+  // D53. Las salas de entrenamiento, aparte: los números de arriba son solo
+  // del staff, y estos no se suman a ellos en ningún sitio.
+  const salas = resumen.salas;
+  const salaDe = (estado: EstadoEquipo) =>
+    salas.por_estado.find((e) => e.estado === estado)?.equipos ?? 0;
 
   const categoryChartData = resumen.por_categoria.map((c: { categoria: CategoriaEquipo; equipos: number }) => ({
     name: c.categoria,
@@ -173,12 +183,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 se veía EN PANTALLA. Y enumeraba cinco sedes cuando son seis.
                 Ahora el reparto lo cuenta el propio gráfico de abajo. */}
             <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              {totalCount} equipos registrados. El desglose por estado y por categoría sale de
-              la base, no de un cálculo aparte.
+              {totalCount} equipos del staff y {salas.total} en salas de entrenamiento, contados por
+              separado.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={onAbrirDisponibles}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Disponibles</span>
+              <span className="bg-white/20 rounded px-1.5 tabular-nums">{disponiblesCount}</span>
+            </button>
             <button
               onClick={onOpenOnboardingModal}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-sm transition-all flex items-center gap-2"
@@ -198,10 +216,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           se quitó. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-        {/* Card 2: asignados frente a disponibles */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition-all hover:shadow-md">
+        {/* Staff: asignados frente a disponibles. El botón lleva a la lista de
+            lo disponible, que es lo que se viene a buscar. */}
+        <button
+          onClick={onAbrirDisponibles}
+          className="text-left bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition-all hover:shadow-md hover:border-emerald-300"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Distribución Activa</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Staff</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <Laptop className="w-4 h-4" />
             </div>
@@ -211,7 +233,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {inUseCount} <span className="text-xs font-normal text-slate-500">Asignados</span>
             </div>
             <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-600 font-medium">
-              <span className="text-blue-700 font-semibold">{disponiblesCount} disponibles</span> sin asignar
+              <span className="text-emerald-700 font-semibold">{disponiblesCount} disponibles</span> sin
+              asignar · ver lista
+              <ArrowRight className="w-3 h-3" />
+            </div>
+          </div>
+        </button>
+
+        {/* D53. Salas de entrenamiento: apartado propio, nunca sumado al staff. */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Salas de entrenamiento
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <GraduationCap className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-bold text-slate-900">
+              {salas.total} <span className="text-xs font-normal text-slate-500">equipos en salas</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-slate-600 font-medium">
+              <span>{salaDe('Disponible')} disponibles</span>
+              {salaDe('En mantenimiento') > 0 && <span>{salaDe('En mantenimiento')} en mantenimiento</span>}
+              {salaDe('De baja') > 0 && <span>{salaDe('De baja')} de baja</span>}
             </div>
           </div>
         </div>
@@ -241,8 +287,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             
             {/* Pie Chart: Equipment by Category */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-1">Equipos por Categoría</h3>
-              <p className="text-xs text-slate-500 mb-4">Reparto real de las {totalCount} filas del inventario</p>
+              <h3 className="text-sm font-bold text-slate-900 mb-1">Staff por categoría</h3>
+              <p className="text-xs text-slate-500 mb-4">Los {totalCount} equipos del staff, sin salas de entrenamiento</p>
 
               <div className="h-48 w-full flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
@@ -281,7 +327,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* Status Breakdown List */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 mb-1">Estado Operativo</h3>
+                <h3 className="text-sm font-bold text-slate-900 mb-1">Estado del staff</h3>
                 <p className="text-xs text-slate-500 mb-4">Visibilidad en tiempo real del ciclo de vida</p>
 
                 <div className="space-y-3">

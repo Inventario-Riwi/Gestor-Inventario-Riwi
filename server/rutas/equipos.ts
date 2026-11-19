@@ -198,10 +198,13 @@ const esquemaFiltros = z.object({
   q: z.string().trim().max(120).optional(),
   /** 0028: solo los de ese uso exclusivo. */
   uso: z.enum(usoExclusivo.enumValues).optional(),
-  /** 0024: solo los de centros de entrenamiento. */
+  /**
+   * Salas de entrenamiento (D53). Sin él, solo staff: las salas van aparte en
+   * todo el inventario. `true` solo salas; `todos` los dos (vincular licencias).
+   */
   ce: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
+    .enum(['true', 'false', 'todos'])
+    .transform((v) => (v === 'todos' ? ('todos' as const) : v === 'true'))
     .optional(),
   // Se valida contra el catálogo de códigos, no como texto libre: un código
   // inexistente devolvería cero filas y parecería "no hay ninguno".
@@ -236,7 +239,7 @@ export function registrarRutasEquipos(app: Express): void {
       // hace que «Sin clasificar» se vea sin ir a buscarlo.
       const [pagina, conteos] = await Promise.all([
         repoEquipos.listar(f),
-        repoEquipos.conteoPorEmpresa(),
+        repoEquipos.conteoPorEmpresa(f.ce ?? false),
       ]);
       res.json({ ...pagina, conteos_empresa: conteos });
     }),
@@ -254,7 +257,7 @@ export function registrarRutasEquipos(app: Express): void {
       const [pagina, conteos, conteosEmpresa] = await Promise.all([
         repoEquipos.listar({ ...f, revision: true }),
         repoEquipos.conteoPorMotivo(),
-        repoEquipos.conteoPorEmpresa(),
+        repoEquipos.conteoPorEmpresa(f.ce ?? false),
       ]);
       // Los conteos van con el listado para que la bandeja pueda pintar los
       // bloques sin una segunda petición: "los 37 de licencia" tiene que ser

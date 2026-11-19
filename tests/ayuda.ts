@@ -964,6 +964,12 @@ export async function equiposEnSedeSql(sedeId: string): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/** Todos los equipos de la tabla, staff y salas, contado en SQL (D53). */
+export async function contarEquiposSql(): Promise<number> {
+  const r = await db.execute<{ n: string }>(sql`SELECT count(*)::text AS n FROM equipos`);
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 /** Cuántas personas activas hay, contado en SQL: contra esto se contrasta `GET /api/empleados/activos`. */
 export async function contarEmpleadosActivosSql(): Promise<number> {
   const r = await db.execute<{ n: string }>(

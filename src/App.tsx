@@ -15,6 +15,7 @@ import { Login } from './components/Login';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
+import { DisponiblesView } from './components/DisponiblesView';
 import { InventoryView } from './components/InventoryView';
 import { SedesView } from './components/SedesView';
 import { EmployeesView } from './components/EmployeesView';
@@ -112,7 +113,13 @@ export function App() {
    * propio conteo — un equipo que viaja sigue estando `Asignado`.
    */
   const enTransito = resumen ? resumen.traslados_abiertos : null;
-  const enMantenimiento = conteoDe('En mantenimiento');
+  // El badge cuenta lo mismo que la vista de Mantenimiento, que tiene los
+  // partes de los dos: staff y salas (D53 los separa en el dashboard).
+  const enMantenimiento =
+    resumen === null
+      ? null
+      : (conteoDe('En mantenimiento') ?? 0) +
+        (resumen.salas.por_estado.find((e) => e.estado === 'En mantenimiento')?.equipos ?? 0);
 
   if (usuario === undefined) {
     return <div className="min-h-screen bg-surface-alt" aria-busy="true" />;
@@ -155,10 +162,14 @@ export function App() {
           {activeTab === 'dashboard' && (
             <DashboardView
               setActiveTab={setActiveTab}
+              onAbrirDisponibles={() => setActiveTab('disponibles')}
               onOpenNewDeviceModal={() => setIsNewDeviceModalOpen(true)}
               onOpenOnboardingModal={() => setIsOnboardingModalOpen(true)}
             />
           )}
+
+          {/* D53. Se abre desde el botón «Disponibles» del dashboard. */}
+          {activeTab === 'disponibles' && <DisponiblesView onVolver={() => setActiveTab('dashboard')} />}
 
           {/* La única conectada a Postgres. Se pide sus datos ella sola. */}
           {activeTab === 'inventory' && (

@@ -107,8 +107,13 @@ export interface FiltrosEquipos {
    */
   empresa?: string;
   q?: string;
-  /** 0024: solo los de centros de entrenamiento. */
-  ce?: boolean;
+  /**
+   * Salas de entrenamiento (D53). Sin decir nada, el listado es el del **staff**:
+   * los equipos de sala van aparte en todo el inventario. `true`: solo los de
+   * sala; `'todos'`: los dos, para quien necesita elegir entre cualquier equipo
+   * (vincular una licencia).
+   */
+  ce?: boolean | 'todos';
   /** 0028: solo los de ese uso exclusivo. */
   uso?: string;
   revision?: boolean;
@@ -137,14 +142,21 @@ export interface FiltrosEquipos {
  * cifra decorativa. Por eso los tres números suman más que el total — los nueve
  * prestados se cuentan en las dos empresas, que es justo lo que significan.
  */
-export async function conteoPorEmpresa(bd: BD = db): Promise<Record<string, number>> {
+export async function conteoPorEmpresa(
+  ce: boolean | 'todos' = false,
+  bd: BD = db,
+): Promise<Record<string, number>> {
+  // D53: los chips cuentan lo mismo que la lista que filtran — staff o salas.
+  const deSala =
+    ce === 'todos' ? sql`true` : ce ? sql`equipos.centro_entrenamiento` : sql`NOT equipos.centro_entrenamiento`;
   const r = await bd.execute<{ empresa: string; n: number }>(
     sql`SELECT x.empresa, count(*)::int AS n
           FROM (
             SELECT equipos.id, equipos.empresa::text AS empresa FROM equipos
+             WHERE ${deSala}
             UNION ALL
             SELECT equipos.id, equipos.prestado_a::text FROM equipos
-             WHERE equipos.prestado_a IS NOT NULL
+             WHERE equipos.prestado_a IS NOT NULL AND ${deSala}
           ) x
          GROUP BY x.empresa`,
   );
@@ -558,7 +570,8 @@ export async function listar(f: FiltrosEquipos = {}, bd: BD = db) {
     if (suyos) condiciones.push(suyos);
   }
   if (f.revision !== undefined) condiciones.push(eq(equipos.requiere_revision, f.revision));
-  if (f.ce !== undefined) condiciones.push(eq(equipos.centro_entrenamiento, f.ce));
+  // D53: sin `ce`, solo staff. Las salas no se mezclan con el resto.
+  if (f.ce !== 'todos') condiciones.push(eq(equipos.centro_entrenamiento, f.ce ?? false));
   if (f.uso) condiciones.push(eq(equipos.uso_exclusivo, f.uso as never));
   if (f.entregables) {
     condiciones.push(inArray(equipos.estado, ['Disponible', 'Reservado']));
@@ -713,19 +726,28 @@ export async function conjunto(id: string, bd: BD = db) {
  * inventa grupos vacíos. Quien lo pinte debe tratar la ausencia como cero, no
  * suponer que están los seis.
  */
+/**
+ * El resumen del dashboard. D53: `por_estado`, `por_categoria` y `total` son
+ * del **staff**; las salas de entrenamiento van en `salas`, aparte. Sumadas,
+ * las dos partes dan la tabla entera — ningún equipo se queda fuera de las dos.
+ */
 export async function resumen(bd: BD = db) {
-  const [porEstado, porCategoria, totales, enTransito] = await Promise.all([
+  const staff = eq(equipos.centro_entrenamiento, false);
+  const sala = eq(equipos.centro_entrenamiento, true);
+  const [porEstado, porCategoria, totales, enTransito, salasEstado, salasCategoria] = await Promise.all([
     bd
       .select({ estado: equipos.estado, equipos: count() })
       .from(equipos)
+      .where(staff)
       .groupBy(equipos.estado)
       .orderBy(asc(equipos.estado)),
     bd
       .select({ categoria: equipos.categoria, equipos: count() })
       .from(equipos)
+      .where(staff)
       .groupBy(equipos.categoria)
       .orderBy(asc(equipos.categoria)),
-    bd.select({ total: count() }).from(equipos),
+    bd.select({ total: count() }).from(equipos).where(staff),
     // «En tránsito» ya no es un estado (D13): son los equipos con un traslado
     // abierto. Va aparte de `por_estado` a propósito — sumarlo ahí haría que
     // los grupos no cuadraran con el total, porque un equipo que viaja SIGUE
@@ -735,6 +757,18 @@ export async function resumen(bd: BD = db) {
       .select({ n: count() })
       .from(movimientos)
       .where(and(eq(movimientos.tipo, 'Traslado'), isNull(movimientos.fecha_confirmacion))),
+    bd
+      .select({ estado: equipos.estado, equipos: count() })
+      .from(equipos)
+      .where(sala)
+      .groupBy(equipos.estado)
+      .orderBy(asc(equipos.estado)),
+    bd
+      .select({ categoria: equipos.categoria, equipos: count() })
+      .from(equipos)
+      .where(sala)
+      .groupBy(equipos.categoria)
+      .orderBy(asc(equipos.categoria)),
   ]);
 
   return {
@@ -742,6 +776,11 @@ export async function resumen(bd: BD = db) {
     por_categoria: porCategoria,
     total: totales[0]?.total ?? 0,
     traslados_abiertos: enTransito[0]?.n ?? 0,
+    salas: {
+      por_estado: salasEstado,
+      por_categoria: salasCategoria,
+      total: salasEstado.reduce((a, e) => a + Number(e.equipos), 0),
+    },
   };
 }
 

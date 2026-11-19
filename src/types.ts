@@ -64,6 +64,8 @@ export type SedeConConteos = Sede & {
   equipos_en_transito: number;
   equipos_por_revisar: number;
   empleados_total: number;
+  /** D53. Los de salas de entrenamiento, aparte: no entran en los de arriba. */
+  equipos_salas: number;
 };
 
 export type Empleado = Serializado<typeof empleados.$inferSelect>;
@@ -241,6 +243,15 @@ export interface ResumenEquipos {
    * distintos sobre el mismo equipo.
    */
   traslados_abiertos: number;
+  /**
+   * D53. Las salas de entrenamiento, aparte: los tres campos de arriba son
+   * solo del staff. Sumadas, las dos partes dan la tabla entera.
+   */
+  salas: {
+    por_estado: { estado: EstadoEquipo; equipos: number }[];
+    por_categoria: { categoria: CategoriaEquipo; equipos: number }[];
+    total: number;
+  };
 }
 
 export type Movimiento = Serializado<typeof movimientos.$inferSelect>;

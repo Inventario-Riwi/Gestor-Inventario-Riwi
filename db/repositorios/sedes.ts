@@ -32,21 +32,24 @@ export async function listar(bd: BD = db) {
  * drizzle no califica dentro de la lista de SELECT y `id` resolvería contra
  * `equipos` en vez de contra `sedes`: la consulta no fallaría, devolvería
  * ceros. Ya pasó una vez con el conteo de empleados.
+ *
+ * D53: todos los conteos de equipos son del **staff**. Los de salas de
+ * entrenamiento van en su propio número, `equipos_salas`, y no se suman.
  */
 export async function listarConConteos(bd: BD = db) {
   return bd
     .select({
       ...CAMPOS_PUBLICOS,
       equipos_total: sql<number>`(
-        SELECT count(*)::int FROM equipos WHERE equipos.sede_id = sedes.id
+        SELECT count(*)::int FROM equipos WHERE equipos.sede_id = sedes.id AND NOT equipos.centro_entrenamiento
       )`,
       equipos_asignados: sql<number>`(
         SELECT count(*)::int FROM equipos
-         WHERE equipos.sede_id = sedes.id AND equipos.estado = 'Asignado'
+         WHERE equipos.sede_id = sedes.id AND NOT equipos.centro_entrenamiento AND equipos.estado = 'Asignado'
       )`,
       equipos_disponibles: sql<number>`(
         SELECT count(*)::int FROM equipos
-         WHERE equipos.sede_id = sedes.id AND equipos.estado = 'Disponible'
+         WHERE equipos.sede_id = sedes.id AND NOT equipos.centro_entrenamiento AND equipos.estado = 'Disponible'
       )`,
       /**
        * Equipos **saliendo** de esta sede: los que todavía la tienen como
@@ -59,7 +62,7 @@ export async function listarConConteos(bd: BD = db) {
        */
       equipos_en_transito: sql<number>`(
         SELECT count(*)::int FROM equipos
-         WHERE equipos.sede_id = sedes.id
+         WHERE equipos.sede_id = sedes.id AND NOT equipos.centro_entrenamiento
            AND EXISTS (
              SELECT 1 FROM movimientos
               WHERE movimientos.equipo_id = equipos.id
@@ -69,10 +72,14 @@ export async function listarConConteos(bd: BD = db) {
       )`,
       equipos_por_revisar: sql<number>`(
         SELECT count(*)::int FROM equipos
-         WHERE equipos.sede_id = sedes.id AND equipos.requiere_revision
+         WHERE equipos.sede_id = sedes.id AND NOT equipos.centro_entrenamiento AND equipos.requiere_revision
       )`,
       empleados_total: sql<number>`(
         SELECT count(*)::int FROM empleados WHERE empleados.sede_id = sedes.id
+      )`,
+      equipos_salas: sql<number>`(
+        SELECT count(*)::int FROM equipos
+         WHERE equipos.sede_id = sedes.id AND equipos.centro_entrenamiento
       )`,
     })
     .from(sedes)
@@ -82,7 +89,7 @@ export async function listarConConteos(bd: BD = db) {
 /** Equipos que no tienen sede. Son deuda del Excel y tienen que verse. */
 export async function equiposSinSede(bd: BD = db) {
   const [{ n }] = await bd.execute<{ n: number }>(
-    sql`SELECT count(*)::int AS n FROM equipos WHERE equipos.sede_id IS NULL`,
+    sql`SELECT count(*)::int AS n FROM equipos WHERE equipos.sede_id IS NULL AND NOT equipos.centro_entrenamiento`,
   ).then((r) => r.rows as { n: number }[]);
   return n;
 }

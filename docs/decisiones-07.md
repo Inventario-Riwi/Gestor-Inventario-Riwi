@@ -437,3 +437,24 @@ un UPDATE a mano, que deja el estado sin movimiento que lo explique (D19,
   en el historial con su autor.
 - §F2 trata `Reversión de baja` como un movimiento que deja el equipo
   `Disponible`.
+
+## D53. Las salas de entrenamiento van aparte en todo el inventario
+
+Pedido del usuario: «los equipos de salas de entrenamiento deben ir aparte de
+los equipos de RIWI staff, no se deben mezclar en ninguna zona del inventario,
+hasta en el dashboard». Las salas ya tenían su pestaña, pero el resto los sumaba
+con el staff.
+
+- **Listado** (`GET /api/equipos` y la bandeja): sin `ce`, solo staff. `ce=true`,
+  solo salas (el botón «Centros de entrenamiento»); `ce=todos`, los dos, solo
+  para vincular licencias, que se ponen a cualquier equipo. Los chips de empresa
+  cuentan lo mismo que la lista.
+- **Dashboard** (`GET /api/equipos/resumen`): `total`, `por_estado` y
+  `por_categoria` son del staff; las salas en `salas`, con su tarjeta propia.
+  Staff + salas = la tabla entera (test contra SQL). El badge de mantenimiento
+  del menú suma los dos, porque la vista de Mantenimiento tiene los partes de
+  los dos.
+- **Empresas y sedes** y **Sedes**: conteos solo del staff; cada sede enseña sus
+  equipos de sala en una línea aparte.
+- **Disponibles**: botón del dashboard que lleva a lo Disponible del staff, en
+  dos bloques (equipos y periféricos), con solo dos filtros: sede y empresa.

@@ -89,7 +89,8 @@ export const LicensesView: React.FC = () => {
   }, [cargar, busqueda]);
 
   useEffect(() => {
-    api.equipos({ porPagina: 200 }).then(
+    // Una licencia se vincula a cualquier equipo, también de sala (D53).
+    api.equipos({ porPagina: 200, ce: 'todos' }).then(
       (r) => setEquipos(r.filas),
       () => setEquipos([]),
     );

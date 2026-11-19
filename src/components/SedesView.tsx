@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Building2,
   Check,
+  GraduationCap,
   Laptop,
   PackageCheck,
   Plus,
@@ -246,7 +247,7 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado, esAd
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {/* 0022: una sede retirada solo se enseña mientras le queden
                 equipos, que es cuando todavía hay algo que trasladar. */}
-            {sedes.filter((s) => s.activa || s.equipos_total > 0).map((sede) => (
+            {sedes.filter((s) => s.activa || s.equipos_total > 0 || s.equipos_salas > 0).map((sede) => (
               <article key={sede.id} className="bg-surface border border-line rounded-xl p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -291,6 +292,14 @@ export const SedesView: React.FC<SedesViewProps> = ({ onTrasladoConfirmado, esAd
                       {sede.empleados_total}
                     </dd>
                   </div>
+                  {/* D53. Las salas, aparte: no están en el número grande. */}
+                  {sede.equipos_salas > 0 && (
+                    <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-line">
+                      <GraduationCap className="w-4 h-4 text-ink-muted shrink-0" />
+                      <dt className="text-ink-muted">En salas de entrenamiento (aparte)</dt>
+                      <dd className="font-medium text-ink tabular-nums ml-auto">{sede.equipos_salas}</dd>
+                    </div>
+                  )}
                   {sede.equipos_por_revisar > 0 && (
                     <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-line">
                       <AlertTriangle className="w-4 h-4 text-warn shrink-0" />

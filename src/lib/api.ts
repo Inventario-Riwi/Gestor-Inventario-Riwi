@@ -122,7 +122,8 @@ export interface FiltrosEquipos {
   q?: string;
   motivo?: string;
   /** 0024: solo los de centros de entrenamiento. */
-  ce?: boolean;
+  /** D53: sin él, solo staff; `true` solo salas; `'todos'` los dos. */
+  ce?: boolean | 'todos';
   /** 0028: solo los de ese uso exclusivo. */
   uso?: string;
   pagina?: number;
