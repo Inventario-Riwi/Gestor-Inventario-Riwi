@@ -171,6 +171,8 @@ export const tipoMovimiento = pgEnum('tipo_movimiento', [
   /** Los dos de la 5e (D32). `Prestado` no llega por ningún otro camino. */
   'Préstamo',
   'Retorno de préstamo',
+  /** 0029 (D52). Un equipo dado de baja que vuelve a circulación. */
+  'Reversión de baja',
 ]);
 
 /**

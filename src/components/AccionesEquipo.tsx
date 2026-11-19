@@ -46,6 +46,8 @@ const QUE_HACE: Partial<Record<Operacion, string>> = {
   reservar: 'Queda apartado: no se ofrece para asignar hasta que se libere.',
   liberar: 'Deja de estar reservado y vuelve a quedar disponible.',
   recuperar_prestamo: 'La empresa a la que se prestó lo devuelve, y queda disponible.',
+  revertir_baja:
+    'La baja fue un error: el equipo vuelve a circulación y queda disponible para asignarlo.',
 };
 
 interface AccionesEquipoProps {
@@ -215,9 +217,9 @@ export const AccionesEquipo: React.FC<AccionesEquipoProps> = ({ equipo, onHecho 
       titulo: `¿${t.etiqueta} ${quien}?`,
       mensaje: t.irreversible ? (
         <>
-          <strong className="text-ink">No se deshace:</strong> no hay operación que devuelva un
-          equipo desde «De baja». Queda en el inventario con su historial completo, pero fuera de
-          circulación.
+          <strong className="text-ink">Queda fuera de circulación:</strong> sigue en el inventario
+          con su historial completo. Si la baja fue un error, se puede revertir desde su ficha, y
+          eso también queda en el historial.
         </>
       ) : (
         <>{QUE_HACE[op] ?? 'Cambia el estado del equipo.'} Queda registrado en su historial.</>

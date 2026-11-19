@@ -391,7 +391,7 @@ JOIN LATERAL (
   SELECT m.tipo
     FROM movimientos m
    WHERE m.equipo_id = e.id
-     AND m.tipo IN ('Asignación', 'Devolución', 'Reserva', 'Liberación', 'Baja')
+     AND m.tipo IN ('Asignación', 'Devolución', 'Reserva', 'Liberación', 'Baja', 'Reversión de baja')
    ORDER BY m.fecha DESC, m.created_at DESC
    LIMIT 1
 ) ult ON true
@@ -401,6 +401,8 @@ WHERE e.estado <> CASE ult.tipo
                     WHEN 'Reserva'    THEN 'Reservado'
                     WHEN 'Liberación' THEN 'Disponible'
                     WHEN 'Baja'       THEN 'De baja'
+                    -- D52: una baja revertida deja el equipo disponible.
+                    WHEN 'Reversión de baja' THEN 'Disponible'
                   END::estado_equipo;
 
 -- La otra cara: el responsable tiene que ser el de la última asignación.

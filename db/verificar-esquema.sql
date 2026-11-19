@@ -1199,6 +1199,17 @@ BEGIN
     INSERT INTO resultado VALUES ('D40: serie duplicada', 'rechazado', 'rechazado');
   END;
 
+  -- 40. D52: «Reversión de baja» es un tipo de movimiento que la base acepta.
+  --     Sin el valor del enum, la operación `revertir_baja` de la tabla de
+  --     transiciones existiría y daría 500 al escribir su movimiento.
+  BEGIN
+    INSERT INTO movimientos (equipo_id, tipo, usuario_app_id)
+      VALUES (v_eq_res, 'Reversión de baja', v_usr);
+    INSERT INTO resultado VALUES ('D52: movimiento Reversión de baja', 'aceptado', 'aceptado');
+  EXCEPTION WHEN invalid_text_representation THEN
+    INSERT INTO resultado VALUES ('D52: movimiento Reversión de baja', 'aceptado', 'RECHAZADO');
+  END;
+
   -- 32. D24: un movimiento firmado por un acta no se puede borrar.
   --     `movimientos` ya es append-only por trigger; esto comprueba la otra
   --     mitad, que la FK del acta también lo sujeta.

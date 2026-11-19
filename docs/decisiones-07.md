@@ -419,3 +419,21 @@ fuera de listados y exportaciones, y accesible de una en una con su fila de
 auditoría, igual que `bios_password`.
 
 `NÚMERO` y `CORREO / WHATSAPP` son datos de contacto normales y van en claro.
+
+## D52. Una baja se puede revertir
+
+Hasta aquí «De baja» era terminal: ninguna operación salía de él. El RIWI-1730
+(un MacBook Air) quedó dado de baja y sigue en uso; hay que devolverlo a
+circulación y asignárselo a una persona. Sin una operación, la única salida era
+un UPDATE a mano, que deja el estado sin movimiento que lo explique (D19,
+`verificar-datos.sql` §F2).
+
+- `revertir_baja` en `db/transiciones.ts`: de `De baja` a `Disponible`, con el
+  movimiento nuevo `Reversión de baja` (migración 0029).
+- Vuelve a **Disponible**, no a Asignado: «la baja fue un error» y «se le
+  entrega a alguien» son dos hechos, y el historial los cuenta como dos, igual
+  que `reasignar`. Después se asigna con la operación de siempre.
+- Mismo permiso que dar de baja: quien puede una puede la otra, y las dos quedan
+  en el historial con su autor.
+- §F2 trata `Reversión de baja` como un movimiento que deja el equipo
+  `Disponible`.

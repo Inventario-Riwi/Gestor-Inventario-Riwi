@@ -277,7 +277,7 @@ describe('transiciones: ya no queda ningún estado sin salida', () => {
    * se descubrieron tarde. Esto los pone en rojo el día que aparezca un
    * tercero.
    */
-  it('el catálogo no declara ningún estado sin operación, salvo De baja', async () => {
+  it('el catálogo no declara ningún estado sin operación', async () => {
     const cat = (await c.get('/api/transiciones')).cuerpo as {
       operaciones: { operacion: string }[];
       por_estado: Record<string, string[]>;
@@ -287,15 +287,15 @@ describe('transiciones: ya no queda ningún estado sin salida', () => {
     assert.deepEqual(cat.sin_operacion, [], 'ESTADOS_SIN_OPERACION tiene que estar vacío');
     assert.equal(
       cat.operaciones.length,
-      11,
-      'seis mutaciones, envío y retorno de taller, prestar y recuperar, y reasignar',
+      12,
+      'seis mutaciones, envío y retorno de taller, prestar y recuperar, reasignar y revertir baja',
     );
 
-    // Todos los estados tienen salida menos «De baja», que es terminal a
-    // propósito: un equipo destruido no vuelve.
+    // Todos los estados tienen salida. «De baja» era terminal hasta D52: su
+    // única salida es revertir la baja, y nada más.
     for (const [estado, ops] of Object.entries(cat.por_estado)) {
       if (estado === 'De baja') {
-        assert.deepEqual(ops, [], 'De baja es terminal');
+        assert.deepEqual(ops, ['revertir_baja'], 'De baja solo sale revirtiendo la baja (D52)');
       } else {
         assert.ok(ops.length > 0, `${estado} se quedó sin ninguna operación`);
       }

@@ -34,7 +34,8 @@ export type Operacion =
   | 'retornar_mantenimiento'
   | 'prestar'
   | 'recuperar_prestamo'
-  | 'reasignar';
+  | 'reasignar'
+  | 'revertir_baja';
 
 export interface Transicion {
   /** Estados desde los que la operación es legal. */
@@ -165,6 +166,28 @@ export const TRANSICIONES: Record<Operacion, Transicion> = {
     irreversible: true,
     explicacion:
       'Un equipo asignado no se puede dar de baja: primero hay que devolverlo, para que quede constancia de que la persona ya no lo tiene.',
+  },
+
+  /**
+   * D52. La salida de «De baja», para corregir una baja que no debió darse: un
+   * equipo que sigue en uso. Vuelve a `Disponible` y no directo a `Asignado`:
+   * son dos hechos distintos —«la baja fue un error» y «se le entrega a
+   * alguien»— y el historial los cuenta como dos, igual que `reasignar`.
+   *
+   * Sin esta operación la única forma de corregir era un UPDATE a mano, que
+   * deja el estado sin movimiento que lo explique (D19, verificar-datos §F2).
+   * No lleva `requiere_asignable`: volver a circulación no pone a nadie
+   * detrás del equipo.
+   */
+  revertir_baja: {
+    desde: ['De baja'],
+    hacia: 'Disponible',
+    movimiento: 'Reversión de baja',
+    disparo: 'directa',
+    requiere: null,
+    etiqueta: 'Revertir baja',
+    explicacion:
+      'Solo se revierte la baja de un equipo dado de baja: vuelve a quedar disponible, con su historial completo.',
   },
 
   reservar: {

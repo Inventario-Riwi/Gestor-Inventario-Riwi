@@ -174,6 +174,41 @@ describe('movimientos: las seis mutaciones', () => {
     assert.equal((await c.post(`/api/equipos/${id}/baja`, {})).estado, 200);
     assert.equal(await estadoDe(id), 'De baja');
   });
+
+  // D52, escrito desde el pedido: «revertir la baja y ponerlo asignado a una
+  // persona». Por los dos lados: desde «De baja» vuelve a Disponible con su
+  // movimiento y se puede asignar; desde cualquier otro estado es 409.
+  it('revertir la baja lo deja disponible, con su movimiento, y se puede asignar', async () => {
+    const id = await crearEquipo(c, `${suite.prefijo}REV`, sedeA);
+    creados.push(id);
+    assert.equal((await c.post(`/api/equipos/${id}/baja`, {})).estado, 200);
+
+    // Dado de baja, asignar sigue siendo 409: la reversión es un paso aparte.
+    assert.equal((await c.post(`/api/equipos/${id}/asignar`, { empleado_id: empleado })).estado, 409);
+
+    const r = await c.post(`/api/equipos/${id}/revertir_baja`, {});
+    assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+    assert.equal(await estadoDe(id), 'Disponible');
+    const movs = await movimientosDe(id);
+    assert.deepEqual(
+      movs.slice(-2).map((m) => m.tipo),
+      ['Baja', 'Reversión de baja'],
+      'el historial cuenta la baja y su reversión como dos hechos',
+    );
+
+    const a = await c.post(`/api/equipos/${id}/asignar`, { empleado_id: empleado });
+    assert.equal(a.estado, 200, JSON.stringify(a.cuerpo));
+    assert.equal(await estadoDe(id), 'Asignado');
+  });
+
+  it('revertir la baja de un equipo que no está de baja es 409', async () => {
+    const id = await crearEquipo(c, `${suite.prefijo}NOREV`, sedeA);
+    creados.push(id);
+    const r = await c.post(`/api/equipos/${id}/revertir_baja`, {});
+    assert.equal(r.estado, 409, JSON.stringify(r.cuerpo));
+    assert.equal(await estadoDe(id), 'Disponible');
+    assert.ok(!(await movimientosDe(id)).some((m) => m.tipo === 'Reversión de baja'));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -632,7 +667,7 @@ describe('transiciones: el catálogo concuerda con lo que hacen los endpoints', 
     await suite.limpiar();
   });
 
-  it('trae las once operaciones, con etiqueta para el botón', () => {
+  it('trae las doce operaciones, con etiqueta para el botón', () => {
     assert.deepEqual(
       catalogo.operaciones.map((o) => o.operacion).sort(),
       [
@@ -646,6 +681,7 @@ describe('transiciones: el catálogo concuerda con lo que hacen los endpoints', 
         'recuperar_prestamo',
         'reservar',
         'retornar_mantenimiento',
+        'revertir_baja',
         'trasladar',
       ],
     );
@@ -706,7 +742,11 @@ describe('transiciones: el catálogo concuerda con lo que hacen los endpoints', 
       'Prestado',
       'Reservado',
     ]);
-    assert.deepEqual(catalogo.por_estado['De baja'], [], 'de "De baja" no sale nada');
+    assert.deepEqual(
+      catalogo.por_estado['De baja'],
+      ['revertir_baja'],
+      'de «De baja» solo se sale revirtiendo la baja (D52)',
+    );
 
     // D29: `sin_operacion` quedó VACÍO al añadir las dos de mantenimiento, y
     // eso es el criterio de que el modelo está completo — cada estado del enum

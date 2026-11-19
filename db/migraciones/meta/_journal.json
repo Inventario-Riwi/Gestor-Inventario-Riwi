@@ -204,6 +204,13 @@
       "when": 1786618800000,
       "tag": "0028_uso_exclusivo",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786622400000,
+      "tag": "0029_reversion_de_baja",
+      "breakpoints": true
     }
   ]
 }
