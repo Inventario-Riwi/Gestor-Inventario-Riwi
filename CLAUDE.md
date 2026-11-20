@@ -7,6 +7,9 @@ ni autenticación. El objetivo es construirle el backend por debajo y reusar la 
 
 ## Lectura obligatoria antes de trabajar
 
+**Para retomar: `docs/traspaso.md`** — en qué estado está producción, qué falta
+y cómo se ha trabajado con el usuario. Leerlo primero.
+
 `docs/plan-migracion-v1.md` — esquema de BD, endpoints, reglas del importador,
 requisitos de seguridad y el orden de las 7 etapas. Es la fuente de verdad.
 Si algo de este archivo contradice ese documento, gana ese documento.
